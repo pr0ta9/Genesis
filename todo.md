@@ -7,25 +7,25 @@
 - **1.3** Set up invoke `⚡ High` *depends on: 5.2*
 - **1.4** Create abstract method ✅
 
-**2.** Set up Task Analyzer Agent `⚡ High`
-- **2.1** Set up AnalyzerResponse model `⚡ High`
-- **2.2** Set up Analyzer.yaml prompt template `⚡ High` *depends on: 5.2*
+**2.** Set up Classifier Agent `⚡ High`
+- **2.1** Set up ClassificationResponse model `⚡ High`
+- **2.2** Set up Classifier.yaml prompt template `⚡ High` *depends on: 5.2*
 - **2.3** Set up __init__ ✅
-- **2.4** Set up analyze method `⚡ High` *depends on: 2.1, 2.2, 5.2*
+- **2.4** Set up classify method `⚡ High` *depends on: 2.1, 2.2, 5.2*
 - **2.5** Set up get_next_step `📋 Medium` *depends on: 2.4*
 
-**3.** Set up Path Selector Agent `⚡ High`
-- **3.1** Set up SelectorResponse model `⚡ High`
-- **3.2** Set up Selector.yaml prompt template `⚡ High` *depends on: 4.0*
+**3.** Set up Router Agent `⚡ High`
+- **3.1** Set up RoutingResponse model `⚡ High`
+- **3.2** Set up Router.yaml prompt template `⚡ High` *depends on: 4.0*
 - **3.3** Set up __init__ ✅
-- **3.4** Set up select method `⚡ High` *depends on: 3.1, 3.2, 4.0*
+- **3.4** Set up route method `⚡ High` *depends on: 3.1, 3.2, 4.0*
 - **3.5** Set up get_next_step `📋 Medium` *depends on: 3.4*
 
-**4.** Set up Result Validator Agent `⚡ High`
-- **4.1** Set up ValidatorResponse model `⚡ High`
-- **4.2** Set up Validator.yaml prompt template `⚡ High` *depends on: 6.0*
+**4.** Set up Finalizer Agent `⚡ High`
+- **4.1** Set up FinalizationResponse model `⚡ High`
+- **4.2** Set up Finalizor.yaml prompt template `⚡ High` *depends on: 6.0*
 - **4.3** Set up __init__ ✅
-- **4.4** Set up validate method `⚡ High` *depends on: 4.1, 4.2, 5.2*
+- **4.4** Set up finalize method `⚡ High` *depends on: 4.1, 4.2, 5.2*
 - **4.5** Set up get_next_step `📋 Medium` *depends on: 4.4*
 
 ## Path
