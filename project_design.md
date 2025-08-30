@@ -1,4 +1,4 @@
-# YORUZUYA Minimal Project Structure
+# Genesis Minimal Project Structure
 
 ## Project Root Structure
 ```
