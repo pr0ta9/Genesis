@@ -1,15 +1,19 @@
-from typing import List, Optional, Literal
+from typing import List, Optional, Dict
 from pydantic import BaseModel, Field
 from langchain_core.messages import BaseMessage
 from langchain_core.language_models import BaseChatModel
 from .base_agent import BaseAgent
 
 
+class PathItem(BaseModel):
+    """A single path step with tool name and parameter bindings."""
+    name: str
+    param_values: Dict[str, str | None]
+
+
 class RoutingResponse(BaseModel):
     """Pydantic model for structured routing response."""
-    path: dict = Field(
-        description="Path for executor"
-    )
+    path: List[PathItem] = Field(description="Path for executor")
     reasoning: str = Field(description="Explanation of routing decision")
     clarification_question: Optional[str] = Field(
         default=None, 
@@ -55,21 +59,10 @@ class Router(BaseAgent[RoutingResponse]):
             return "router_reiteration"
         
         # Check for null values in path param_values
-        if isinstance(result.path, list):
-            for path_obj in result.path:
-                if "param_values" in path_obj and "output_params" in path_obj and "param_types" in path_obj:
-                    param_values = path_obj["param_values"]
-                    # Check if any param_values contain null
-                    if any(value is None for value in param_values.values()):
-                        # Get first output_param
-                        if path_obj["output_params"]:
-                            first_output_param = path_obj["output_params"][0]
-                            # Change output_type to the type from param_types
-                            if first_output_param in path_obj["param_types"]:
-                                param_type = path_obj["param_types"][first_output_param]
-                                self.output_type = param_type if isinstance(param_type, str) else str(param_type)
-                                self.is_partial = True
-                                return "path_generation"
+        for step in result.path:
+            if any(value is None for value in step.param_values.values()):
+                self.is_partial = True
+                return "path_generation"
         
         return "execution"
     

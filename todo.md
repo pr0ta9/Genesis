@@ -8,14 +8,14 @@
 - **1.4** Create abstract method ✅
 
 **2.** Set up Classifier Agent `⚡ High`
-- **2.1** Set up ClassificationResponse model `⚡ High`
+- **2.1** Set up ClassificationResponse model `⚡ High` ✅
 - **2.2** Set up Classifier.yaml prompt template `⚡ High` *depends on: 5.2*
 - **2.3** Set up __init__ ✅
 - **2.4** Set up classify method `⚡ High` *depends on: 2.1, 2.2, 5.2*
 - **2.5** Set up get_next_step `📋 Medium` *depends on: 2.4*
 
 **3.** Set up Router Agent `⚡ High`
-- **3.1** Set up RoutingResponse model `⚡ High`
+- **3.1** Set up RoutingResponse model `⚡ High` ✅
 - **3.2** Set up Router.yaml prompt template `⚡ High` *depends on: 4.0*
 - **3.3** Set up __init__ ✅
 - **3.4** Set up route method `⚡ High` *depends on: 3.1, 3.2, 4.0*
@@ -30,11 +30,12 @@
 
 ## Path
 **5.** Set up Path System (Type-based routing and path discovery) `🔥 Critical`
-- **5.1** Set up decorators.py - @tool decorator for input/output type declaration `🔥 Critical`
-    - **5.1.1** Fix @tool decorator to some other name `🔥 Critical`
-- **5.2** Set up metadata.py - WorkflowType, FileType system, ToolMetadata `🔥 Critical` *depends on: 5.1*
-- **5.3** Set up registry.py - Tool discovery and type→tools index `🔥 Critical` *depends on: 5.2*
-- **5.4** Set up generator.py - DFS path planning with type compatibility `🔥 Critical` *depends on: 5.3*
+- **5.1** Set up decorators.py - @tool decorator for input/output type declaration `🔥 Critical` ✅
+    - **5.1.1** Fix @tool decorator to some other name `🔥 Critical` ✅
+- **5.2** Set up metadata.py - WorkflowType, FileType system, ToolMetadata `🔥 Critical` *depends on: 5.1* ✅
+    - **5.2.1** Finalize TypeClass `🔥 Critical` ✅
+- **5.3** Set up registry.py - Tool discovery and type→tools index `🔥 Critical` *depends on: 5.2, 7.1*
+- **5.4** Set up generator.py - DFS path planning with type compatibility `🔥 Critical` *depends on: 5.3, 7.1*
 
 ## Executor
 **6** Set up Executor System (executable path) `🔥 Critical`
@@ -112,3 +113,4 @@
 
 ---
 *Last updated: Genesis Project - Structured Dependencies*
+
