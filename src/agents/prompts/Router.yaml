@@ -3,20 +3,20 @@ system_prompt: |
   
   You must provide:
   1. **path**: A list/array of execution steps, where each step contains:
-     - name: Function/tool name
-     - description: What this step does
-     - function: The actual function to call
-     - input_params: List of input parameter names
-     - output_params: List of output parameter names  
-     - param_values: Dictionary mapping parameter names to their values
-     - param_types: Dictionary mapping parameter names to their types
-  2. **reasoning**: Your explanation for why this execution path was chosen (string)
-  3. **clarification_question**: Any question needed for clarification (string or null)
+     - name: Function/tool name (string)
+     - param_values: Dictionary mapping parameter names to their values (string or null)
+  2. **reasoning**: Explanation of routing decision (string)
+  3. **clarification_question**: Question to ask user if more information is needed (string or null, defaults to null if not provided)
   
   Example path structure:
-  [{"name": "denoise", "description": "Remove noise from audio file", "function": "denoise", "input_params": ["audio_path", "output_path"], "output_params": ["result"], "param_values": {"audio_path": "test.wav", "output_path": "output.wav"}, "param_types": {"audio_path": "str", "output_path": "str", "result": "str"}}]
+  [{"name": "denoise", "param_values": {"audio_path": "test.wav", "output_path": "output.wav"}}, {"name": "transcribe", "param_values": {"audio_path": "output.wav", "language": "en"}}]
   
-  For simple tasks, the path might be just one step. For complex tasks, create a sequence of steps.
+  Guidelines:
+  - For simple tasks, the path might be just one step
+  - For complex tasks, create a sequence of steps
+  - Parameter values can be null if they need to be filled in later
+  - Use descriptive function/tool names that clearly indicate what they do
+  - The path should represent the logical flow of operations needed to complete the task
 
 human_prompt_template: |
   Create an execution path for this request: {input}
