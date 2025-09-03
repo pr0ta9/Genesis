@@ -142,9 +142,26 @@ class PathToolMetadata:
     param_types: Dict[str, type]
     # Additional required inputs (multi-input tools)
     required_inputs: Dict[str, Any] = field(default_factory=dict)
+    # Predefined parameters with default values (param -> value)
+    default_params: Dict[str, Any] = field(default_factory=dict)
     
     def to_dict(self) -> Dict[str, Any]:
-        """Convert to path dict"""
+        """Convert to path tool dict"""
+        param_types_str = {
+            k: (v.__name__ if hasattr(v, '__name__') else str(v))
+            for k, v in self.param_types.items()
+        }
+        required_inputs_str = {
+            k: (v.__name__ if hasattr(v, '__name__') else str(v))
+            for k, v in self.required_inputs.items()
+        }
+        default_params_struct = {
+            p: {
+                "type": param_types_str.get(p, "Any"),
+                "value": self.default_params.get(p)
+            }
+            for p in self.default_params.keys()
+        }
         return {
             "name": self.name,
             "function": f"<function {self.name}>",
@@ -153,9 +170,8 @@ class PathToolMetadata:
             "output_key": self.output_key,
             "input_params": self.input_params,
             "output_params": self.output_params,
-            "param_types": {k: v.__name__ if hasattr(v, '__name__') else str(v) 
-                           for k, v in self.param_types.items()},
-            "required_inputs": {k: v.__name__ if hasattr(v, '__name__') else str(v)
-                                 for k, v in self.required_inputs.items()}
+            "param_types": param_types_str,
+            "required_inputs": required_inputs_str,
+            "default_params": default_params_struct,
         }
 # param_type = {audio_path: AudioFile, output_path: AudioFile, return: AudioFile}

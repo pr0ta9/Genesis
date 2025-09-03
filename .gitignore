@@ -115,3 +115,17 @@ dmypy.json
 .Trashes
 ehthumbs.db
 Thumbs.db
+
+# test cache files
+tmp/
+*.jpg
+*.png
+*.jpeg
+*.gif
+*.bmp
+*.tiff
+*.ico
+*.webp
+*.svg
+*.pdf
+image_to_image_paths.txt

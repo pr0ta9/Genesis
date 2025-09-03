@@ -29,19 +29,24 @@
 - **4.5** Set up get_next_step `📋 Medium` *depends on: 4.4*
 
 ## Path
-**5.** Set up Path System (Type-based routing and path discovery) `🔥 Critical`
+**5.** Set up Path System (Type-based routing and path discovery) `🔥 Critical` ✅
 - **5.1** Set up decorators.py - @tool decorator for input/output type declaration `🔥 Critical` ✅
     - **5.1.1** Fix @tool decorator to some other name `🔥 Critical` ✅
 - **5.2** Set up metadata.py - WorkflowType, FileType system, ToolMetadata `🔥 Critical` *depends on: 5.1* ✅
     - **5.2.1** Finalize TypeClass `🔥 Critical` ✅
-- **5.3** Set up registry.py - Tool discovery and type→tools index `🔥 Critical` *depends on: 5.2, 7.1*
-- **5.4** Set up generator.py - DFS path planning with type compatibility `🔥 Critical` *depends on: 5.3, 7.1*
+- **5.3** Set up registry.py - Tool discovery and type→tools index `🔥 Critical` *depends on: 5.2, 7.1* ✅
+    - **5.3.1** Lazy load improvement `🔥 Critical` ✅
+- **5.4** Set up generator.py - DFS path planning with type compatibility `🔥 Critical` *depends on: 5.3, 7.1* ✅
+    - **5.4.1** New path algorithm implementation(deduplication + contribution system) `🔥 Critical` ✅
 
 ## Executor
-**6** Set up Executor System (executable path) `🔥 Critical`
-- **6.1** Set up flow_state.py - StateGenerator for TypedDict schemas `🔥 Critical` *depends on: 5.0*
-- **6.2** Set up conversion.py - StateGraphConverter for LangGraph compilation `🔥 Critical` *depends on: 11.1*
-- **6.3** Set up execution.py - GraphExecutor and ExecutionOrchestrator `🔥 Critical` *depends on: 11.2*
+**6** Set up Executor System (executable path) `🔥 Critical` ✅
+- **6.1** Set up flow_state.py - StateGenerator for TypedDict schemas `🔥 Critical` *depends on: 5.0* ✅
+- **6.2** Set up conversion.py - StateGraphConverter for LangGraph compilation `🔥 Critical` ✅
+- **6.3** Set up execution.py - GraphExecutor and ExecutionOrchestrator `🔥 Critical` *depends on: 6.4* ✅
+    - **6.3.1** Torch import conflict between tools(created 6.4) `🔥 Critical` ✅
+- **6.4** Set up process_isolation.py - tmp + python file generation `🔥 Critical` *depends on: 6.2* ✅
+
 
 ## Tools
 **7.** Set up Tools Infrastructure `⚡ High`
@@ -84,19 +89,19 @@
 - **10.4** Create README.md `📋 Medium`
 
 ## Data Management
-**12.** Set up Data & Templates `💡 Low`
-- **12.1** Set up templates directory structure `💡 Low`
-- **12.2** Implement successful path pattern storage `💡 Low` *depends on: 5.0*
-- **12.3** Set up runtime path caching `💡 Low` *depends on: 12.2*
-- **12.4** Create cache management utilities `💡 Low` *depends on: 12.3*
+**11.** Set up Data & Templates `💡 Low`
+- **11.1** Set up templates directory structure `💡 Low`
+- **11.2** Implement successful path pattern storage `💡 Low` *depends on: 5.0*
+- **11.3** Set up runtime path caching `💡 Low` *depends on: 12.2*
+- **11.4** Create cache management utilities `💡 Low` *depends on: 12.3*
 
 ## Testing
-**13.** Set up Testing Infrastructure `💡 Low`
-- **13.1** Set up unit test framework `💡 Low`
-- **13.2** Test path generation `💡 Low` *depends on: 5.0*
-- **13.3** Test execution `💡 Low` *depends on: 7.0*
-- **13.4** Test agent interactions `💡 Low` *depends on: 2.0, 3.0, 4.0*
-- **13.4** Set up end-to-end workflow tests `💡 Low` *depends on: 9.5*
+**12.** Set up Testing Infrastructure `💡 Low`
+- **12.1** Set up unit test framework `💡 Low`
+- **12.2** Test path generation `💡 Low` *depends on: 5.0*
+- **12.3** Test execution `💡 Low` *depends on: 7.0*
+- **12.4** Test agent interactions `💡 Low` *depends on: 2.0, 3.0, 4.0*
+- **12.4** Set up end-to-end workflow tests `💡 Low` *depends on: 9.5*
 
 ---
 

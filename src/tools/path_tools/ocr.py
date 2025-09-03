@@ -301,17 +301,35 @@ def _ocr_internal(input_path: str, config: Optional[Dict] = None) -> StructuredD
         raise FileNotFoundError(f"Input file not found: {input_path}")
     
     print(f"Processing: {input_path}")
+    # Debug: file existence and size
+    try:
+        exists = os.path.exists(input_path)
+        size = os.path.getsize(input_path) if exists else -1
+        print(f"[OCR Debug] exists={exists} size={size}")
+    except Exception as e:
+        print(f"[OCR Debug] file stat error: {e}")
     
     # Step 1: Run PaddleOCR
+    if PaddleOCR is None:
+        print("PaddleOCR unavailable; returning empty OCR result (fallback mode)")
+        return []
     print("Initializing PaddleOCR...")
-    ocr_engine = PaddleOCR(
-        use_doc_orientation_classify=False,
-        use_doc_unwarping=False,
-        use_textline_orientation=False,
-        ocr_version="PP-OCRv5",
-    )
+    try:
+        ocr_engine = PaddleOCR(
+            use_doc_orientation_classify=False,
+            use_doc_unwarping=False,
+            use_textline_orientation=False,
+            ocr_version="PP-OCRv5",
+        )
+    except Exception as e:
+        print(f"Failed to initialize PaddleOCR: {e}. Using fallback empty result.")
+        return []
     
-    result = ocr_engine.predict(input=input_path)
+    try:
+        result = ocr_engine.predict(input=input_path)
+    except Exception as e:
+        print(f"[OCR Debug] ocr_engine.predict failed: {e}")
+        return []
     
     # Extract OCR results directly from PaddleOCR result objects
     paddle_data = {
@@ -320,12 +338,38 @@ def _ocr_internal(input_path: str, config: Optional[Dict] = None) -> StructuredD
         'rec_scores': []
     }
     
+    def _extract_payload(item):
+        """Normalize PaddleOCR 3.1 outputs to a dict-like payload containing fields.
+        Handles cases where data is nested under `res` or provided as attributes.
+        """
+        # If dict and contains 'res', unwrap it
+        if isinstance(item, dict):
+            return item.get('res', item)
+        # If object with 'res' attribute, unwrap it
+        inner = getattr(item, 'res', None)
+        return inner if inner is not None else item
+    
     # Process each result page
-    for res in result:
-        if hasattr(res, 'dt_polys') and hasattr(res, 'rec_texts') and hasattr(res, 'rec_scores'):
-            paddle_data['dt_polys'].extend(res.dt_polys if res.dt_polys else [])
-            paddle_data['rec_texts'].extend(res.rec_texts if res.rec_texts else [])
-            paddle_data['rec_scores'].extend(res.rec_scores if res.rec_scores else [])
+    if not result:
+        print("[OCR Debug] PaddleOCR returned empty result list")
+    for res in (result or []):
+        payload = _extract_payload(res)
+        # Support both dict payloads and objects with attributes
+        if isinstance(payload, dict):
+            dt_polys = payload.get('dt_polys')
+            rec_texts = payload.get('rec_texts')
+            rec_scores = payload.get('rec_scores')
+        else:
+            dt_polys = getattr(payload, 'dt_polys', None)
+            rec_texts = getattr(payload, 'rec_texts', None)
+            rec_scores = getattr(payload, 'rec_scores', None)
+        
+        if dt_polys is not None and rec_texts is not None and rec_scores is not None:
+            paddle_data['dt_polys'].extend(dt_polys if len(dt_polys) else [])
+            paddle_data['rec_texts'].extend(rec_texts if len(rec_texts) else [])
+            paddle_data['rec_scores'].extend(rec_scores if len(rec_scores) else [])
+        else:
+            print("[OCR Debug] Missing keys in OCR payload: dt_polys/rec_texts/rec_scores")
     
     # Create ImageText objects (unified class!)
     min_conf = config.get('merge', {}).get('min_confidence', 0.5)
@@ -346,6 +390,8 @@ def _ocr_internal(input_path: str, config: Optional[Dict] = None) -> StructuredD
             ))
     
     print(f"Created {len(texts)} ImageText objects from {len(dt_polys)} detections")
+    if len(dt_polys) and not len(texts):
+        print(f"[OCR Debug] All detections filtered by min_conf {min_conf}")
     
     # Step 2: Merge text using optimized merger
     print("\nMerging text boxes...")
@@ -376,7 +422,7 @@ def _ocr_internal(input_path: str, config: Optional[Dict] = None) -> StructuredD
     print(f"Merged regions: {len(regions)}")
     reduction_ratio = (1 - len(regions)/len(dt_polys))*100 if dt_polys else 0
     print(f"Reduction: {reduction_ratio:.1f}%")
-    print(f"✨ Returning {len(bboxes)} bboxes")
+    print(f"Returning {len(bboxes)} bboxes")
     
     return bboxes
 

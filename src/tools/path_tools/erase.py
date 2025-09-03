@@ -154,7 +154,7 @@ def create_mask_from_imagetext_list(image_shape, text_regions, padding=5):
     
     return mask
 
-@pathtool(input="bbox_data", output="return")
+@pathtool(input="input_path", output="return", requires={"bbox_data": StructuredData})
 def erase(bbox_data: StructuredData, input_path: ImageFile, output_path: ImageFile, device: str = 'cuda', padding: int = 10) -> ImageFile:
     """
     Remove text from image using LaMa inpainting model - ImageText compatible version

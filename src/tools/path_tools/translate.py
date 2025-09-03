@@ -1,11 +1,19 @@
 from ...path import pathtool, StructuredData
-from langchain_ollama import ChatOllama
+from langchain_core.language_models import BaseChatModel
 
 @pathtool(input="text_data", output="return")
-def translate(text_data: StructuredData, model: ChatOllama, target_language: str = 'english') -> StructuredData:
+def translate(text_data: StructuredData, model: BaseChatModel, target_language: str = 'english') -> StructuredData:
     """Translate text in list of objects with translation/text/is_cjk_translation fields"""
     import copy
     import re
+    # Lazily create a default model if none is provided, so callers (and isolated processes)
+    # don't need to pass non-picklable model objects.
+    if model is None:
+        try:
+            from src.agents.llm import setup_llm
+            model = setup_llm("ollama", "gpt-oss:20b")
+        except Exception as e:
+            raise RuntimeError(f"Translation model is required but could not be initialized: {e}")
     
     # Create a deep copy to preserve all original data structure and fields
     # Only translation/text/is_cjk_translation fields will be updated

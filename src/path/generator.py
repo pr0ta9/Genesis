@@ -129,69 +129,183 @@ class PathGenerator:
         
     def find_all_paths(self, input_type: Type, output_type: Type, max_depth: int = 5) -> List[List[PathToolMetadata]]:
         """
-        Find all valid paths from input_type to output_type
-        Uses DFS to avoid infinite loops and ensures no tool is used twice in a path
-        
-        Args:
-            input_type: Starting type class for the transformation
-            output_type: Target type class to reach
-            max_depth: Maximum number of tools in a path
-            
-        Returns:
-            List of paths, where each path is a list of PathToolMetadata objects
-        """
-        all_paths: List[List[PathToolMetadata]] = []
+        Provenance-aware path enumeration from input_type to output_type.
+        1) enumerating sequences while recording which provider supplies each required type
+        2) filtering to strict-contribution paths (every earlier tool is actually consumed)
+        3) canonicalizing sequences by provider→consumer DAG with the final tool fixed last
+        4) deduplicating canonical paths
 
-        # DFS over a set of available types (enables multi-input prerequisites)
-        def dfs_available(
+        Returns a list of paths where each path is a list of PathToolMetadata objects
+        ordered by the canonical topological order.
+        """
+        START = "__START__"
+
+        # Helper: choose a concrete available type to satisfy a required type deterministically
+        def _select_provider_type(available_types: Set[Type], required_type: Type) -> Type:
+            # Prefer exact type match if present; otherwise fall back to a deterministic choice
+            if required_type in available_types:
+                return required_type
+            compatible = [t for t in available_types if is_type_compatible(t, required_type)]
+            if not compatible:
+                raise RuntimeError("No compatible available type to satisfy requirement")
+            # Deterministic tie-breaker: type name then repr
+            compatible.sort(key=lambda t: (getattr(t, '__name__', str(t)), str(t)))
+            return compatible[0]
+
+        # Helper: strict contribution check (final tool must output target; all earlier tools used later)
+        def _contributes(seq: List[PathToolMetadata], bindings: List[Dict[str, str]]) -> bool:
+            if not seq:
+                return False
+            final_out = seq[-1].param_types.get(seq[-1].output_key)
+            if final_out != output_type:
+                return False
+            n = len(seq)
+            for i, tool in enumerate(seq[:-1]):
+                used_later = any(tool.name in bindings[j].values() for j in range(i + 1, n))
+                if not used_later:
+                    return False
+            return True
+
+        # Helper: canonicalize by dependency DAG induced from actual bindings
+        def _canonicalize_by_edges(seq: List[PathToolMetadata], bindings: List[Dict[str, str]]) -> List[str]:
+            import heapq
+            names = [t.name for t in seq]
+            final_name = names[-1]
+
+            # Build edges provider→consumer (exclude START)
+            edges: Set[Tuple[str, str]] = set()
+            for j, tool in enumerate(seq):
+                for prov in bindings[j].values():
+                    if prov != START:
+                        edges.add((prov, tool.name))
+
+            # Topo sort excluding the final node (we will append it last)
+            nodes_set = set(names)
+            nodes_set.discard(final_name)
+
+            in_deg: Dict[str, int] = {u: 0 for u in nodes_set}
+            adj: Dict[str, List[str]] = {u: [] for u in nodes_set}
+            for u, v in edges:
+                if v == final_name:
+                    continue
+                if u in nodes_set and v in nodes_set:
+                    adj[u].append(v)
+                    in_deg[v] += 1
+
+            heap = [u for u, d in in_deg.items() if d == 0]
+            heapq.heapify(heap)
+            order: List[str] = []
+            while heap:
+                u = heapq.heappop(heap)
+                order.append(u)
+                for w in adj.get(u, []):
+                    in_deg[w] -= 1
+                    if in_deg[w] == 0:
+                        heapq.heappush(heap, w)
+
+            if len(order) != len(nodes_set):
+                # Fallback to original order if something unexpected happens
+                order = [n for n in names if n != final_name]
+
+            order.append(final_name)
+            return order
+
+        # Enumerate sequences with provenance bindings
+        enumerated: List[Tuple[List[PathToolMetadata], List[Dict[str, str]]]] = []
+
+        # Use a fixed list of remaining tools to mirror the "no reuse" constraint
+        all_tools: List[PathToolMetadata] = list(self.registry.tools.values())
+
+        def dfs(
             available_types: Set[Type],
-            current_path: List[PathToolMetadata],
-            visited_tools: Set[str]
+            provider_of: Dict[Type, str],
+            remaining_tools: List[PathToolMetadata],
+            seq: List[PathToolMetadata],
+            binds: List[Dict[str, str]]
         ) -> None:
-            # Goal check: if desired output type is available
-            if output_type in available_types and current_path:
-                all_paths.append(current_path.copy())
-                # Do not return immediately; allow discovering alternative continuations
-            
+            # Record completed path only if the last tool outputs the target type
+            if seq:
+                last_out = seq[-1].param_types.get(seq[-1].output_key)
+                if last_out == output_type:
+                    enumerated.append((seq[:], [b.copy() for b in binds]))
+
             # Depth limit
-            if len(current_path) >= max_depth:
+            if len(seq) >= max_depth:
                 return
 
-            # Try all tools; they can run if their main input type is available
-            for tool in self.registry.tools.values():
-                if tool.name in visited_tools:
-                    continue
-
-                # Main input compatibility: any available type must satisfy tool's input type
+            # Determine ready tools
+            ready: List[PathToolMetadata] = []
+            for tool in remaining_tools:
                 in_type = tool.param_types.get(tool.input_key)
+                # Must have at least one available type compatible with main input
                 if not any(is_type_compatible(av_t, in_type) for av_t in available_types):
                     continue
+                # All required inputs must be satisfiable by current available types
+                req_types: List[Type] = list(tool.required_inputs.values()) if tool.required_inputs else []
+                if any(not any(is_type_compatible(av_t, req_t) for av_t in available_types) for req_t in req_types):
+                    continue
+                ready.append(tool)
 
-                # Check additional required inputs types are present
+            # Deterministic order by tool name
+            ready.sort(key=lambda t: t.name)
+
+            for tool in ready:
+                in_type = tool.param_types.get(tool.input_key)
+
+                # Bind to current providers for required types using a deterministic selection
+                try:
+                    bound_main_type = _select_provider_type(available_types, in_type)
+                except Exception:
+                    continue
+                consumption: Dict[str, str] = {getattr(in_type, '__name__', str(in_type)): provider_of[bound_main_type]}
+
                 if tool.required_inputs:
-                    # All required input types must be present in available_types
-                    missing = [p for p, t in tool.required_inputs.items()
-                               if not any(is_type_compatible(av_t, t) for av_t in available_types)]
-                    if missing:
-                        # Cannot execute this tool yet
-                        continue
+                    for req_param, req_t in tool.required_inputs.items():
+                        try:
+                            bound_req_type = _select_provider_type(available_types, req_t)
+                        except Exception:
+                            bound_req_type = None
+                        if bound_req_type is None:
+                            consumption[getattr(req_t, '__name__', str(req_t))] = START
+                        else:
+                            consumption[getattr(req_t, '__name__', str(req_t))] = provider_of[bound_req_type]
 
-                # If previous step outputs a dict key, compatibility was already handled by type check above
-
-                # Apply tool: add its output type to available types
-                next_available: Set[Type] = set(available_types)
+                # Apply tool: latest-wins provider and extend available types
+                next_available = set(available_types)
                 out_type = tool.param_types.get(tool.output_key)
                 next_available.add(out_type)
+                next_provider = dict(provider_of)
+                next_provider[out_type] = tool.name
 
-                dfs_available(
-                    next_available,
-                    current_path + [tool],
-                    visited_tools | {tool.name}
-                )
+                next_remaining = [t for t in remaining_tools if t is not tool]
+                dfs(next_available, next_provider, next_remaining, seq + [tool], binds + [consumption])
 
-        # Start with the initial available type set containing the input type
-        dfs_available({input_type}, [], set())
-        return all_paths
+        dfs({input_type}, {input_type: START}, all_tools[:], [], [])
+
+        # Filter to strict-contribution paths
+        filtered: List[Tuple[List[PathToolMetadata], List[Dict[str, str]]]] = [
+            (seq, b) for (seq, b) in enumerated if _contributes(seq, b)
+        ]
+
+        # Canonicalize and deduplicate
+        seen: Set[Tuple[str, ...]] = set()
+        canonical_paths: List[List[PathToolMetadata]] = []
+        for seq, b in filtered:
+            order = _canonicalize_by_edges(seq, b)
+            key = tuple(order)
+            if key in seen:
+                continue
+            seen.add(key)
+            # Reorder the actual tool objects to match canonical order
+            name_to_tool: Dict[str, PathToolMetadata] = {t.name: t for t in seq}
+            canonical_paths.append([name_to_tool[n] for n in order])
+
+        # Sort by (length, tool name list) for stable output
+        def _sort_key(path: List[PathToolMetadata]):
+            return (len(path), [t.name for t in path])
+
+        canonical_paths.sort(key=_sort_key)
+        return canonical_paths
     
     def find_shortest_path(self, input_type: Type, output_type: Type) -> List[PathToolMetadata]:
         """Find the shortest path between two types"""
