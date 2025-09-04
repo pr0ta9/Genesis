@@ -2,9 +2,8 @@ import yaml
 from abc import ABC, abstractmethod
 from typing import Dict, Any, List, TypeVar, Generic
 from pydantic import BaseModel
-from langchain_core.messages import HumanMessage, AIMessage, BaseMessage
+from langchain_core.messages import HumanMessage, AIMessage, BaseMessage, SystemMessage
 from langchain_core.language_models import BaseChatModel
-from langchain_core.prompts import ChatPromptTemplate
 
 # Generic type for response schemas
 ResponseType = TypeVar('ResponseType', bound=BaseModel)
@@ -16,7 +15,6 @@ class BaseAgent(ABC, Generic[ResponseType]):
     
     Provides common functionality for:
     - Loading YAML prompt configurations
-    - Creating chat templates
     - Managing structured LLM output
     - Handling message history
     """
@@ -33,43 +31,55 @@ class BaseAgent(ABC, Generic[ResponseType]):
         self.llm = llm.with_structured_output(response_schema)
         self.response_schema = response_schema
         self.prompt_config = self._load_prompt(prompt_path)
-        self.chat_template = self._create_chat_template()
         
     def _load_prompt(self, prompt_path: str) -> Dict[str, Any]:
         """Load prompt configuration from YAML file."""
         with open(prompt_path, 'r') as f:
             return yaml.safe_load(f)
     
-    def _create_chat_template(self) -> ChatPromptTemplate:
-        """Create ChatPromptTemplate from loaded prompt configuration."""
-        return ChatPromptTemplate.from_messages([
-            ("system", self.prompt_config["system_prompt"]),
-            ("human", self.prompt_config["human_prompt_template"])
-        ])
+    def create_response_message(self, structured_response: ResponseType, **additional_metadata: Any) -> AIMessage:
+        """
+        Create an AIMessage with internal reasoning stored in metadata.
+        
+        Args:
+            structured_response: The structured response from the LLM
+            user_response: The user-facing response text
+            **additional_metadata: Any additional metadata to store
+            
+        Returns:
+            AIMessage with user response as content and reasoning in metadata
+        """
+        # Convert structured response to dict for storage
+        internal_data = structured_response.model_dump() if hasattr(structured_response, 'model_dump') else dict(structured_response)
+        
+        # Add any additional metadata
+        internal_data.update(additional_metadata)
+        
+        return AIMessage(
+            content=internal_data.get("response") or internal_data.get("clarification_question") or internal_data.get("cot", ""),
+            response_metadata=internal_data,
+        )
     
-    def _invoke_with_history(
+    def _invoke(
         self, 
-        user_input: str, 
-        message_history: List[BaseMessage] = None,
-        action_name: str = "Processing"
+        messages: List[BaseMessage],
+        node: str,
     ) -> tuple[ResponseType, List[BaseMessage]]:
         """
         Common method to invoke LLM and manage message history.
         
         Args:
-            user_input: The raw user input
-            message_history: Existing conversation history
-            action_name: Name of the action for history logging (e.g., "Classification", "Routing")
+            messages: Existing conversation history
+            node: Name of the node for logging/tracking
             
         Returns:
             Tuple of (structured_response, updated_message_history)
         """
-        # Initialize message history if None
-        if message_history is None:
-            message_history = []
+        # Create system message
+        system_msg = SystemMessage(content=self.prompt_config["system_prompt"])
         
-        # Create messages with template (for processing only, not stored)
-        processing_messages = self.chat_template.format_messages(input=user_input)
+        # Build processing messages: [SystemMessage] + messages
+        processing_messages = [system_msg] + messages
         
         # Get structured LLM response
         result = self.llm.invoke(
@@ -77,14 +87,8 @@ class BaseAgent(ABC, Generic[ResponseType]):
             temperature=self.prompt_config.get("metadata", {}).get("temperature", 0.1),
             max_tokens=self.prompt_config.get("metadata", {}).get("max_tokens", 500)
         )
-        
-        # Add both user input and AI response to message history
-        updated_history = message_history + [
-            HumanMessage(content=user_input),
-            AIMessage(content=f"{action_name}: {result.model_dump_json()}")
-        ]
-            
-        return result, updated_history
+        updated_messages = messages + [self.create_response_message(result, node)]
+        return result, updated_messages
         
     @abstractmethod
     def get_next_step(self, result: ResponseType) -> str:

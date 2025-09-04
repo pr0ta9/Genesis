@@ -30,7 +30,7 @@ def _get_font_storage_dir():
     return default_dir
 
 @pathtool(input="bbox_data", output="return", requires={"image_input": ImageFile})
-def inpaint_text(image_input: ImageFile, bbox_data: StructuredData, output_path: ImageFile, font_paths=None, min_font_size=20, max_font_size=100):
+def inpaint_text(image_input: ImageFile, bbox_data: StructuredData, output_path: ImageFile, font_paths=None, min_font_size=20, max_font_size=100) -> ImageFile:
     """
     Fits and draws horizontal text strings into their specified bounding boxes using binary search.
     

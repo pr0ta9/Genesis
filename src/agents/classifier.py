@@ -1,8 +1,9 @@
-from typing import List, Optional, Type, Any
+from typing import List, Optional, Type, Any, ClassVar, Dict
 from pydantic import BaseModel, Field, field_validator
-from langchain_core.messages import BaseMessage
+from langchain_core.messages import BaseMessage, HumanMessage
 from langchain_core.language_models import BaseChatModel
 from .base_agent import BaseAgent
+from ..state import State
 from ..path import (
     WorkflowType,
     Text,
@@ -22,13 +23,14 @@ class ClassificationResponse(BaseModel):
     output_type: Type[WorkflowType] = Field(description="Expected type of output to be delivered as a WorkflowType class")
     is_complex: bool = Field(description="Whether the task requires complex processing beyond simple web search")
     reasoning: str = Field(description="Explanation of the classification decision")
+    cot: str = Field(description="Step-by-step thinking process, one thought per line")
     clarification_question: Optional[str] = Field(
         default=None, 
         description="Question to ask user if more information is needed"
     )
 
     # Strict label-to-type mappings (only the listed classes)
-    _ALLOWED_LABELS = {
+    _ALLOWED_LABELS: ClassVar[dict] = {
         "text": Text,
         "audiofile": AudioFile,
         "imagefile": ImageFile,
@@ -75,27 +77,41 @@ class Classifier(BaseAgent[ClassificationResponse]):
         """
         super().__init__(llm, ClassificationResponse, prompt_path)
     
-    def get_default_prompt_path(self) -> str:
-        """Return the default prompt path for the Classifier."""
-        return "prompts/Classifier.yaml"
-    
-    def classify(self, user_input: str, message_history: List[BaseMessage] = None) -> tuple[ClassificationResponse, List[BaseMessage]]:
+    def classify(self, state: State) -> Dict[str, Any]:
         """
         Classify the user's request and determine the task type.
         
         Args:
-            user_input: The raw user input (what gets stored in message history)
+            state: The current state of the workflow
             message_history: Existing conversation history
             
         Returns:
             Tuple of (classification_result, updated_message_history)
         """
-        return self._invoke_with_history(user_input, message_history, "Classification")
+        node = "classify"
+        messages: List[BaseMessage] = state.get("messages", [])
+        # Extract latest human input from message history
+
+        classification, updated_history = self._invoke(messages, node)
+
+        next_node = self._get_next_step(classification)
+
+        return {
+            "node": node,
+            "next_node": next_node,
+            "objective": classification.objective,
+            "input_type": classification.input_type.value,
+            "type_savepoint": [classification.output_type.value],
+            "is_complex": classification.is_complex,
+            "classify_reasoning": classification.reasoning,
+            "classify_clarification": classification.clarification_question,
+            "messages": updated_history,
+        }
     
-    def get_next_step(self, result: ClassificationResponse) -> str:
+    def _get_next_step(self, result: ClassificationResponse) -> str:
         """Determine next step based on classification result."""
         if result.clarification_question:
-            return "classify_reiteration"
+            return "waiting_for_feedback"
         elif result.is_complex:
             return "path_generation"
         else:

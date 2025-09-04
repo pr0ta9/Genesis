@@ -48,6 +48,7 @@ def test_imagefile_to_imagefile_paths_and_report():
     # Discover all provenance-aware canonical paths
     paths = generator.find_all_paths(ImageFile, ImageFile)
     print(f"Found {len(paths)} paths at {datetime.now()}")
+    print(f"paths: {paths}")
     # Prepare output path next to this test file
     out_path = os.path.join(os.path.dirname(__file__), 'image_to_image_paths.txt')
 
@@ -92,7 +93,7 @@ if __name__ == '__main__':
     registry = _build_registry()
     generator = PathGenerator(registry)
     paths = generator.find_all_paths(ImageFile, ImageFile)
-
+    print(f"paths: {paths}")
     out_path = sys.argv[1] if len(sys.argv) > 1 else os.path.join(os.path.dirname(__file__), 'image_to_image_paths.txt')
 
     lines = []
