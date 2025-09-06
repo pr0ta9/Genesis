@@ -7,7 +7,7 @@ from typing import Any, Dict, List, Callable, Set, Type, Union, Optional
 from dataclasses import dataclass, field
 from abc import ABC, abstractmethod
 from pathlib import Path
-
+from enum import Enum
 
 # =============================================================================
 # STRUCTURED TYPE HIERARCHY
@@ -126,6 +126,28 @@ class StructuredData(WorkflowType):
     def validate_data(cls, data: Any) -> bool:
         # Simple validation - just check if it's a dictionary
         return isinstance(data, dict)
+
+class WorkflowTypeEnum(Enum):
+    TEXT = ("text", Text)
+    AUDIOFILE = ("audiofile", AudioFile)
+    IMAGEFILE = ("imagefile", ImageFile)
+    VIDEOFILE = ("videofile", VideoFile)
+    TEXTFILE = ("textfile", TextFile)
+    DOCUMENTFILE = ("documentfile", DocumentFile)
+    STRUCTUREDDATA = ("structureddata", StructuredData)
+
+    def __new__(cls, value: str, type_class: Type[WorkflowType]):
+        obj = object.__new__(cls)
+        obj._value_ = value
+        obj.cls = type_class
+        return obj
+
+    @classmethod
+    def from_class(cls, type_class: Type[WorkflowType]) -> "WorkflowTypeEnum":
+        for member in cls:
+            if getattr(member, "cls", None) is type_class:
+                return member
+        raise ValueError(f"No WorkflowTypeEnum member for class: {getattr(type_class, '__name__', str(type_class))}")
 
 @dataclass
 class PathToolMetadata:

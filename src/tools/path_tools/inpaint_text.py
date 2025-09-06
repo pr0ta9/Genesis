@@ -6,6 +6,21 @@ import os
 import urllib.request
 from ...path import ImageFile, StructuredData, pathtool
 
+# Console-safe text sanitizer to avoid Windows CP1252 encode errors
+def _sanitize_for_console(text: str) -> str:
+    if not isinstance(text, str):
+        return text
+    # Replace various hyphen/dash variants with ASCII '-' for console output only
+    return (
+        text
+        .replace('\u2010', '-')  # hyphen
+        .replace('\u2011', '-')  # non-breaking hyphen
+        .replace('\u2012', '-')  # figure dash
+        .replace('\u2013', '-')  # en dash
+        .replace('\u2014', '-')  # em dash
+        .replace('\u2212', '-')  # minus sign
+    )
+
 # Resolve local font directories (project-level)
 _THIS_DIR = os.path.dirname(__file__)
 # Go up three levels: path_tools -> tools -> src -> project root
@@ -594,7 +609,7 @@ def inpaint_text(image_input: ImageFile, bbox_data: StructuredData, output_path:
         
         if font is None:
             # Fallback: Force fit by aggressively breaking words with hyphens
-            print(f"Using fallback hyphen-breaking for text '{translation[:30]}...'")
+            print(f"Using fallback hyphen-breaking for text '{_sanitize_for_console(translation[:30])}...'")
             result = force_fit_with_hyphen_breaking(translation, merged_bbox, font_paths, min_font_size, draw, is_cjk_translation, is_vertical_cjk)
             
             if len(result) == 5:
@@ -628,7 +643,7 @@ def inpaint_text(image_input: ImageFile, bbox_data: StructuredData, output_path:
             draw.multiline_text((x_pos, y_pos), wrapped_text, font=font, 
                                spacing=line_spacing, fill=(0, 0, 0))  # Black text
         
-        print(f"Text '{translation[:30]}...' fitted with font size {font_size} ({'vertical' if is_vertical_cjk else 'horizontal'})")
+        print(f"Text '{_sanitize_for_console(translation[:30])}...' fitted with font size {font_size} ({'vertical' if is_vertical_cjk else 'horizontal'})")
 
     img.save(output_path)
     print(f"Image saved as '{output_path}'")

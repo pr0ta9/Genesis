@@ -8,6 +8,7 @@ intelligent process isolation for tool execution.
 """
 
 from typing import Any, Dict, List, Callable
+from ..path.models import PathItem  # type: ignore
 from inspect import signature
 from langgraph.graph import StateGraph, END, START
 from datetime import datetime
@@ -32,7 +33,7 @@ class StateGraphConverter:
         self.use_full_isolation = use_full_isolation
     
     def convert_to_stategraph(self, 
-                            path_object: List[Dict[str, Any]],
+                            path_object: List[PathItem],
                             state_schema: Dict[str, Any]) -> StateGraph:
         """
         Convert a path object into an executable StateGraph.
@@ -51,7 +52,7 @@ class StateGraphConverter:
             # Use selective isolation within normal StateGraph
             return self._create_selective_isolation_graph(path_object, state_schema)
     
-    def _create_fully_isolated_graph(self, path_object: List[Dict[str, Any]], state_schema: Dict[str, Any]) -> StateGraph:
+    def _create_fully_isolated_graph(self, path_object: List[PathItem], state_schema: Dict[str, Any]) -> StateGraph:
         """Create a StateGraph that runs the entire path in isolated mode."""
         from .process_isolation import IsolatedGraphExecutor
         
@@ -74,7 +75,7 @@ class StateGraphConverter:
         
         return builder.compile()
     
-    def _create_selective_isolation_graph(self, path_object: List[Dict[str, Any]], state_schema: Dict[str, Any]) -> StateGraph:
+    def _create_selective_isolation_graph(self, path_object: List[PathItem], state_schema: Dict[str, Any]) -> StateGraph:
         """Create normal StateGraph with selective tool isolation."""
         
         builder = StateGraph(state_schema)
@@ -82,13 +83,12 @@ class StateGraphConverter:
         # Add tool nodes with selective isolation
         node_names: List[str] = []
         for i, tool_spec in enumerate(path_object):
-            node_name = tool_spec.get('name', f'tool_{i}')
-            tool_func = tool_spec.get('function')
+            node_name = tool_spec.name
+            tool_func = tool_spec.function
+            input_params = list(tool_spec.input_params or [])
+            output_params = list(tool_spec.output_params or [])
             if tool_func is None or not callable(tool_func):
                 raise ValueError(f"Path step {i} missing a callable 'function'")
-            
-            input_params = tool_spec.get('input_params', [])
-            output_params = tool_spec.get('output_params', [])
             
             node_func = self._make_hybrid_adapter(node_name, tool_func, input_params, output_params, tool_spec)
             builder.add_node(node_name, node_func)
@@ -105,7 +105,7 @@ class StateGraphConverter:
     
     def _make_hybrid_adapter(self, node_name: str, tool_func: Callable, 
                             input_params: List[str], output_params: List[str], 
-                            tool_spec: Dict[str, Any]) -> Callable[[Dict[str, Any]], Dict[str, Any]]:
+                            tool_spec: PathItem) -> Callable[[Dict[str, Any]], Dict[str, Any]]:
         """
         Create adapter that can run tool either directly or in isolation.
         
@@ -129,10 +129,12 @@ class StateGraphConverter:
             
             # Check if tool needs isolation
             needs_isolation = should_isolate(node_name)
-            non_serializable = identify_non_serializable_params(tool_spec)
+            # Normalize PathItem for isolation helpers
+            ts_dict = tool_spec.model_dump()
+            non_serializable = identify_non_serializable_params(ts_dict)
             
             # If tool has non-serializable inputs from previous steps, we need special handling
-            param_values = tool_spec.get('param_values', {}) or {}
+            param_values = tool_spec.param_values or {}
             has_model_param = any(p in non_serializable for p in input_params if p in param_values)
             
             if needs_isolation and not has_model_param:
@@ -144,8 +146,8 @@ class StateGraphConverter:
                 tmp_root.mkdir(parents=True, exist_ok=True)
                 workspace_dir = Path(tempfile.mkdtemp(prefix=f"genesis_{node_name}_", dir=str(tmp_root)))
                 try:
-                    # Prepare tool spec with resolved values
-                    resolved_spec = tool_spec.copy()
+                    # Prepare tool spec dict with resolved values
+                    resolved_spec = tool_spec.model_dump()
                     resolved_values = {}
                     
                     for name in input_params:

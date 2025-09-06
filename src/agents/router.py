@@ -1,27 +1,12 @@
+import os
 from typing import List, Optional, Dict, Any
 from pydantic import BaseModel, Field
 from langchain_core.messages import BaseMessage
 from langchain_core.language_models import BaseChatModel
 from .base_agent import BaseAgent
+from ..logging_utils import pretty
+from ..path import WorkflowTypeEnum, SimplePath, PathItem
 from ..state import State
-
-
-class SimplePath(BaseModel):
-    """Simple path step from LLM with just name and param_values."""
-    name: str
-    param_values: Dict[str, Any] = Field(default_factory=dict)
-
-
-class PathItem(BaseModel):
-    """Complete path step with all metadata populated from registry."""
-    name: str
-    description: str
-    function: Optional[Any] = None  # Will be resolved during execution
-    input_params: List[str]
-    output_params: List[str]
-    param_values: Dict[str, Any]
-    param_types: Dict[str, Any]
-
 
 class RoutingResponse(BaseModel):
     """Routing response from LLM."""
@@ -39,7 +24,7 @@ class Router(BaseAgent[RoutingResponse]):
     Routing agent that determines which specialized agent should handle a classified task.
     """
     
-    def __init__(self, llm: BaseChatModel, prompt_path: str = "prompts/Router.yaml"):
+    def __init__(self, llm: BaseChatModel, prompt_path: str = os.path.join(os.path.dirname(__file__), 'prompts', 'Router.yaml')):
         """
         Initialize the Router agent.
         
@@ -64,6 +49,15 @@ class Router(BaseAgent[RoutingResponse]):
         for i in range(end_index):
             simple_step = simple_path[i]
             tool_meta = tools_by_name[simple_step.name]  # No need for error handling
+            # Merge defaults: if a param is explicitly set to None and a default exists, use the default
+            # Also fill in any missing defaulted params
+            merged_values = dict(simple_step.param_values or {})
+            default_params = (tool_meta.get("default_params") or {})
+            for key, meta in default_params.items():
+                default_value = (meta or {}).get("value")
+                if key not in merged_values or merged_values.get(key) is None:
+                    # Only set when missing or explicitly None
+                    merged_values[key] = default_value
             
             # Build complete PathItem from metadata
             path_item = PathItem(
@@ -72,7 +66,7 @@ class Router(BaseAgent[RoutingResponse]):
                 function=None,  # Will be resolved during execution
                 input_params=tool_meta["input_params"],
                 output_params=tool_meta["output_params"], 
-                param_values=simple_step.param_values,
+                param_values=merged_values,
                 param_types=tool_meta["param_types"]
             )
             full_path.append(path_item)
@@ -99,6 +93,14 @@ class Router(BaseAgent[RoutingResponse]):
         
         # Determine next step (handles conversion and logic internally)
         next_node = self._get_next_step(routing, tool_metadata, type_savepoint)
+
+        # High-level summary log
+        self.logger.info(
+            "Router decided next_node=%s steps=%d partial=%s",
+            next_node,
+            len(routing.path) if routing.path else 0,
+            self.is_partial,
+        )
         
         return {
             "node": node,
@@ -119,9 +121,18 @@ class Router(BaseAgent[RoutingResponse]):
             self.full_path = self._convert_to_full_path(routing.path, tool_metadata)
             return "waiting_for_feedback"
         
-        # Check for null values in simple path param_values first
+        # Build lookup for tool metadata by name
+        tools_by_name = {tool["name"]: tool for tool in tool_metadata}
+
+        # Check for null values in simple path param_values first, ignoring keys with defaults
         for i, simple_step in enumerate(routing.path):
-            if any(value is None for value in simple_step.param_values.values()):
+            tool_meta = tools_by_name.get(simple_step.name)
+            default_keys = set((tool_meta.get("default_params") or {}).keys()) if tool_meta else set()
+            has_non_default_none = any(
+                (value is None) and (key not in default_keys)
+                for key, value in simple_step.param_values.items()
+            )
+            if has_non_default_none:
                 self.is_partial = True
                 
                 # Convert path up to this point to get param_types for previous step
@@ -136,11 +147,14 @@ class Router(BaseAgent[RoutingResponse]):
                         for output_param in previous_step.output_params:
                             if output_param in previous_step.param_types:
                                 output_type = previous_step.param_types[output_param]
-                                type_savepoint.append(str(output_type))
+                                # Map the class to the enum using the new enum structure
+                                try:
+                                    enum_value = WorkflowTypeEnum.from_class(output_type)
+                                except Exception:
+                                    enum_value = None
+                                if enum_value is not None:
+                                    type_savepoint.append(enum_value)
                                 break
-                    else:
-                        # Fallback: use the previous step's name if no output_params
-                        type_savepoint.append(previous_step.name)
                 else:
                     # If this is the first step and has None values, 
                     # we need more information from user
@@ -149,4 +163,4 @@ class Router(BaseAgent[RoutingResponse]):
                 return "find_path"
         
         self.full_path = self._convert_to_full_path(routing.path, tool_metadata)
-        return "execution"
+        return "execute"

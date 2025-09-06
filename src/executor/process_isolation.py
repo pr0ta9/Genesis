@@ -18,6 +18,7 @@ import pickle
 import shutil
 from pathlib import Path
 from typing import Any, Dict, Tuple, Optional, Set
+from ..path.models import PathItem  # type: ignore
 import uuid
 
 
@@ -116,7 +117,7 @@ def should_isolate(tool_name: str) -> bool:
 
 
 def identify_non_serializable_params(tool_spec: Dict[str, Any]) -> Set[str]:
-    """Identify parameters that cannot be JSON-serialized."""
+    """Identify parameters that cannot be JSON-serialized (dict-based helper for isolation)."""
     non_serializable = set()
     param_types = tool_spec.get("param_types", {})
     
@@ -231,14 +232,14 @@ def run_tool_isolated(
     Returns:
         The function's return value (from state store)
     """
-    tool_name = tool_spec["name"]
+    tool_name = tool_spec.name if isinstance(tool_spec, PathItem) else tool_spec["name"]
     
     # Get module and function info
     if tool_name in ISOLATED_TOOL_MAP:
         module_path, function_name = ISOLATED_TOOL_MAP[tool_name]
     else:
         # Try to extract from function object
-        func = tool_spec.get("function")
+        func = tool_spec.function if isinstance(tool_spec, PathItem) else tool_spec.get("function")
         if func:
             module_path = getattr(func, "__module__", None)
             function_name = getattr(func, "__name__", None)
@@ -252,7 +253,9 @@ def run_tool_isolated(
     
     # Initialize state store and save non-serializable objects
     state_store = StateStore(workspace_dir)
-    param_values = tool_spec.get("param_values", {})
+    param_values = tool_spec.param_values if isinstance(tool_spec, PathItem) else tool_spec.get("param_values", {})
+    if param_values is None:
+        param_values = {}
     
     for param in non_serializable_params:
         if param in param_values:
@@ -265,8 +268,8 @@ def run_tool_isolated(
         module_path=module_path,
         function_name=function_name,
         tool_name=tool_name,
-        input_params=tool_spec.get("input_params", []),
-        output_params=tool_spec.get("output_params", []),
+        input_params=(tool_spec.input_params if isinstance(tool_spec, PathItem) else tool_spec.get("input_params", [])) or [],
+        output_params=(tool_spec.output_params if isinstance(tool_spec, PathItem) else tool_spec.get("output_params", [])) or [],
         param_values=param_values,
         workspace_dir=workspace_dir,
         non_serializable_params=non_serializable_params
@@ -298,7 +301,7 @@ def run_tool_isolated(
         )
     
     # Return the output from state store
-    output_params = tool_spec.get("output_params", [])
+    output_params = (tool_spec.output_params if isinstance(tool_spec, PathItem) else tool_spec.get("output_params", [])) or []
     if not output_params:
         return None
     elif len(output_params) == 1:
@@ -315,7 +318,7 @@ class IsolatedGraphExecutor:
         self.project_root = project_root
         self.workspace_dir = None
     
-    def execute_path(self, path_object: list, initial_state: Dict[str, Any]) -> Dict[str, Any]:
+    def execute_path(self, path_object: list[PathItem], initial_state: Dict[str, Any]) -> Dict[str, Any]:
         """Execute path with each tool in a separate process.
         
         Args:
@@ -339,13 +342,13 @@ class IsolatedGraphExecutor:
             
             # Execute each tool
             for tool_spec in path_object:
-                tool_name = tool_spec["name"]
+                tool_name = tool_spec.name
                 print(f"\n=== Executing tool: {tool_name} ===")
                 
                 if should_isolate(tool_name):
                     # Run in isolated process
                     result = run_tool_isolated(
-                        tool_spec=tool_spec,
+                        tool_spec=tool_spec.model_dump(),
                         workspace_dir=self.workspace_dir,
                         project_root=self.project_root
                     )
@@ -377,13 +380,13 @@ class IsolatedGraphExecutor:
                 if self.workspace_dir and self.workspace_dir.exists():
                     shutil.rmtree(self.workspace_dir, ignore_errors=True)
     
-    def _run_tool_direct(self, tool_spec: Dict[str, Any], state_store: StateStore) -> Any:
+    def _run_tool_direct(self, tool_spec: PathItem, state_store: StateStore) -> Any:
         """Run a tool directly without isolation (for tools with non-serializable inputs)."""
-        func = tool_spec["function"]
-        input_params = tool_spec.get("input_params", [])
-        output_params = tool_spec.get("output_params", [])
-        param_values = tool_spec.get("param_values", {})
-        tool_name = tool_spec["name"]
+        func = tool_spec.function
+        input_params = tool_spec.input_params or []
+        output_params = tool_spec.output_params or []
+        param_values = tool_spec.param_values or {}
+        tool_name = tool_spec.name
         
         # Build kwargs
         kwargs = {}
