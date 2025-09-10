@@ -1,8 +1,10 @@
+import os
 from typing import List, Optional, Literal, Dict, Any
 from pydantic import BaseModel, Field
 from langchain_core.messages import BaseMessage
 from langchain_core.language_models import BaseChatModel
 from .base_agent import BaseAgent
+from ..logging_utils import pretty
 from ..state import State
 
 
@@ -13,7 +15,6 @@ class FinalizationResponse(BaseModel):
         default="", description="The final response to the user"
     )
     reasoning: str = Field(description="Explanation of how the final answer was constructed")
-    cot: str = Field(description="Step-by-step thinking process, one thought per line")
     summary: Optional[str] = Field(
         default=None, description="Summary of previous outputs"
     )
@@ -24,7 +25,7 @@ class Finalizer(BaseAgent[FinalizationResponse]):
     Finalization agent that produces the final structured response to the user.
     """
     
-    def __init__(self, llm: BaseChatModel, prompt_path: str = "prompts/Finalizer.yaml"):
+    def __init__(self, llm: BaseChatModel, prompt_path: str = os.path.join(os.path.dirname(__file__), 'prompts', 'Finalizer.yaml')):
         """
         Initialize the Finalizer agent.
         
@@ -39,17 +40,67 @@ class Finalizer(BaseAgent[FinalizationResponse]):
         Create the final response based on all previous agent outputs.
         
         Args:
-            user_input: The raw user input (what gets stored in message history)
-            message_history: Existing conversation history
+            state: The current state containing messages and execution results
             
         Returns:
-            Tuple of (finalization_result, updated_message_history)
+            Dictionary containing finalization results and updated state
         """
         node = "finalize"
         messages: List[BaseMessage] = state.get("messages", [])
-        finalization, updated_history = self._invoke(messages, node)
+        execution_results = state.get("execution_results")
+        is_complex = state.get("is_complex")
+        
+        # Create a special message containing execution results for the LLM to see
+        if execution_results:
+            from langchain_core.messages import SystemMessage
+            execution_summary = self._format_execution_results(execution_results)
+            execution_message = SystemMessage(
+                content=f"EXECUTION RESULTS:\n{execution_summary}"
+            )
+            messages_with_execution = messages + [execution_message]
+        else:
+            messages_with_execution = messages
+        
+        finalization, updated_history = self._invoke(
+            messages_with_execution,
+            node,
+            is_complex=is_complex,
+        )
+
+        # Coerce any unstructured results into FinalizationResponse
+        if isinstance(finalization, FinalizationResponse):
+            pass
+        elif isinstance(finalization, str):
+            finalization = FinalizationResponse(
+                is_complete=True,
+                response=finalization,
+                reasoning="",
+            )
+        elif isinstance(finalization, dict):
+            try:
+                finalization = FinalizationResponse.model_validate(finalization)
+            except Exception:
+                finalization = FinalizationResponse(
+                    is_complete=True,
+                    response=str(finalization),
+                    reasoning="",
+                )
+        else:
+            # Handle numbers, lists, or any other type by stringifying
+            finalization = FinalizationResponse(
+                is_complete=True,
+                response=str(finalization),
+                reasoning="",
+            )
 
         next_node = self._get_next_step(finalization, state.get("is_partial", False))
+
+        # High-level summary log
+        self.logger.info(
+            "Finalizer decided next_node=%s is_complete=%s",
+            next_node,
+            finalization.is_complete,
+        )
 
         return {
             "node": node,
@@ -60,7 +111,36 @@ class Finalizer(BaseAgent[FinalizationResponse]):
             "summary": finalization.summary,
             "messages": updated_history,
         }
-    def get_next_step(self, result: FinalizationResponse, is_partial: bool = False) -> str:
+        
+    def _format_execution_results(self, execution_results) -> str:
+        """
+        Format execution results into a readable summary for the LLM.
+        
+        Args:
+            execution_results: Dict containing execution info (from ExecutionResult.to_dict())
+            
+        Returns:
+            Formatted string summary of execution results
+        """
+        if isinstance(execution_results, dict):
+            # Already a dictionary (from ExecutionResult.to_dict())
+            result_dict = execution_results
+        else:
+            return f"Execution completed with result: {execution_results}"
+            
+        summary = []
+        summary.append(f"Success: {result_dict.get('success', False)}")
+        summary.append(f"Execution Path: {' -> '.join(result_dict.get('execution_path', []))}")
+        summary.append(f"Steps Completed: {result_dict.get('steps_completed', 0)}")
+        
+        if result_dict.get('final_output'):
+            summary.append(f"Final Output: {result_dict['final_output']}")
+            
+        if result_dict.get('error_info'):
+            summary.append(f"Error Info: {result_dict['error_info']}")
+            
+        return "\n".join(summary)
+    def _get_next_step(self, result: FinalizationResponse, is_partial: bool = False) -> str:
         """Determine next step based on finalization result."""
         if result.is_complete and not is_partial:
             return "END"

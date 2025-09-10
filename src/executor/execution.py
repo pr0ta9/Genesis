@@ -8,6 +8,7 @@ error handling, and structured result extraction.
 """
 
 from typing import Any, Dict, List, Optional, Callable
+from ..path.models import PathItem  # type: ignore
 from .flow_state import StateGenerator
 from langgraph.graph import StateGraph
 class ExecutionNodeError(Exception):
@@ -113,7 +114,7 @@ class GraphExecutor:
     def execute_graph(self, 
                      workflow: StateGraph, 
                      initial_state: Dict[str, Any],
-                     path_object: List[Dict[str, Any]]) -> ExecutionResult:
+                     path_object: List[PathItem]) -> ExecutionResult:
         """
         Execute a compiled StateGraph.
         
@@ -130,7 +131,7 @@ class GraphExecutor:
             # Report execution start
             self.progress_tracker.report_progress("execution_started", {
                 "path_length": len(path_object),
-                "tool_names": [tool.get("name", "unknown") for tool in path_object],
+                "tool_names": [tool.name for tool in path_object],
                 "initial_state_keys": list(initial_state.keys())
             })
             
