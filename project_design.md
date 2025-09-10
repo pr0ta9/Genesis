@@ -2,7 +2,7 @@
 
 ## Project Root Structure
 ```
-yoruzuya/
+Genesis/
 ├── src/
 │   ├── path/                    
 │   │   └── # Type system + Path generation + Graph construction + Path finding algorithms

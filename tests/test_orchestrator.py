@@ -64,7 +64,7 @@ def test_basic_orchestrator_run():
         print(f"Orchestrator initialized at {datetime.now()}")
         
         # Create multimodal message with image
-        image_path = r"C:\Users\Richard\Documents\GitHub\Genesis\test.png"
+        image_path = "test.png"
         user_text = "I want to translate text in an image from japanese to English, return the translated image replacing the original text. Write it into same directory as the image but named test_translated.png."
         
         content_blocks = create_image_content_block(image_path, user_text)
@@ -181,7 +181,7 @@ def test_orchestrator_with_message_history():
             ),
         ]
         # Create multimodal message with image
-        image_path = r"C:\Users\Richard\Documents\GitHub\Genesis\test.png"
+        image_path = "test.png"
         user_text = "yes, here is the image"
         
         content_blocks = create_image_content_block(image_path, user_text)

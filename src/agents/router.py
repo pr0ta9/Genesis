@@ -1,4 +1,5 @@
 import os
+import json
 from typing import List, Optional, Dict, Any
 from pydantic import BaseModel, Field
 from langchain_core.messages import BaseMessage
@@ -7,12 +8,13 @@ from .base_agent import BaseAgent
 from ..logging_utils import pretty
 from ..path import WorkflowTypeEnum, SimplePath, PathItem
 from ..state import State
+from ..streaming import emit_status, StatusType
+from pathlib import Path
 
 class RoutingResponse(BaseModel):
     """Routing response from LLM."""
     path: List[SimplePath] = Field(description="Simple path with names and param values")
     reasoning: str = Field(description="Explanation of routing decision")
-    cot: str = Field(description="Step-by-step thinking process, one thought per line")
     clarification_question: Optional[str] = Field(
         default=None, 
         description="Question to ask user if more information is needed"
@@ -87,9 +89,93 @@ class Router(BaseAgent[RoutingResponse]):
         messages: List[BaseMessage] = state.get("messages", [])
         type_savepoint = state.get("type_savepoint", [])
         tool_metadata = state.get("tool_metadata", [])
+        all_paths = state.get("all_paths", [])
         
         # Get LLM response
-        routing, updated_history = self._invoke(messages, node)
+        # Discover available file references from InputFileManager mapping
+        available_files: List[str] = []
+        try:
+            conv_id = os.environ.get("GENESIS_CONVERSATION_ID")
+            if conv_id:
+                # Determine inputs root via env or common defaults
+                inputs_root_candidates: List[Path] = []
+                env_root = os.environ.get("GENESIS_INPUTS_ROOT")
+                if env_root:
+                    inputs_root_candidates.append(Path(env_root))
+                inputs_root_candidates.extend([Path("./inputs"), Path("backend/inputs")])
+
+                mapping_path: Optional[Path] = None
+                for root in inputs_root_candidates:
+                    candidate = root / conv_id / "mapping.json"
+                    if candidate.exists():
+                        mapping_path = candidate
+                        break
+                if mapping_path is None:
+                    # Fallback to first candidate path even if not present (for debug visibility)
+                    mapping_path = inputs_root_candidates[0] / conv_id / "mapping.json" if inputs_root_candidates else Path("./inputs") / conv_id / "mapping.json"
+                if mapping_path.exists():
+                    mapping_obj = json.load(open(mapping_path, "r", encoding="utf-8"))
+                    if isinstance(mapping_obj, dict):
+                        available_files = list(mapping_obj.keys())
+        except Exception:
+            available_files = []
+
+        # Emit routing inputs debug
+        try:
+            emit_status(
+                type=StatusType.EXECUTION_EVENT,
+                node=node,
+                event={
+                    "status": "routing_inputs",
+                    "available_files": available_files,
+                    "mapping_path": str(mapping_path.resolve()) if 'mapping_path' in locals() and mapping_path is not None else None
+                }
+            )
+        except Exception:
+            pass
+
+        routing, updated_history = self._invoke(
+            messages,
+            node,
+            available_paths=all_paths,
+            tool_descriptions=tool_metadata,
+            available_files=available_files,
+        )
+
+        # Coerce/normalize unstructured JSON string/dict into RoutingResponse
+        if isinstance(routing, str):
+            try:
+                routing = RoutingResponse.model_validate(json.loads(routing))
+            except Exception:
+                try:
+                    data = json.loads(routing or "{}")
+                except Exception:
+                    data = {}
+                routing = data
+        elif isinstance(routing, dict):
+            pass
+
+        # Normalize keys per step (tool_name -> name) and strip output_path
+        if isinstance(routing, dict) and isinstance(routing.get("path"), list):
+            for step in routing.get("path", []):
+                if isinstance(step, dict):
+                    if "tool_name" in step and "name" not in step:
+                        step["name"] = step.pop("tool_name")
+                    pv = step.get("param_values")
+                    if isinstance(pv, dict) and "output_path" in pv:
+                        pv.pop("output_path", None)
+            try:
+                routing = RoutingResponse.model_validate(routing)
+            except Exception:
+                routing = None
+
+        # Fallback: if routing is invalid or empty, ask for clarification instead of crashing
+        if not isinstance(routing, RoutingResponse):
+            routing = RoutingResponse(
+                path=[],
+                reasoning="Routing model returned an invalid/empty response; requesting clarification.",
+                clarification_question="Please confirm the desired steps/tools so I can proceed."
+            )
         
         # Determine next step (handles conversion and logic internally)
         next_node = self._get_next_step(routing, tool_metadata, type_savepoint)
@@ -123,7 +209,7 @@ class Router(BaseAgent[RoutingResponse]):
         
         # Build lookup for tool metadata by name
         tools_by_name = {tool["name"]: tool for tool in tool_metadata}
-
+        print(f"tools_by_name: {tools_by_name}")
         # Check for null values in simple path param_values first, ignoring keys with defaults
         for i, simple_step in enumerate(routing.path):
             tool_meta = tools_by_name.get(simple_step.name)

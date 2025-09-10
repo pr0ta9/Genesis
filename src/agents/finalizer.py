@@ -15,7 +15,6 @@ class FinalizationResponse(BaseModel):
         default="", description="The final response to the user"
     )
     reasoning: str = Field(description="Explanation of how the final answer was constructed")
-    cot: str = Field(description="Step-by-step thinking process, one thought per line")
     summary: Optional[str] = Field(
         default=None, description="Summary of previous outputs"
     )
@@ -49,6 +48,7 @@ class Finalizer(BaseAgent[FinalizationResponse]):
         node = "finalize"
         messages: List[BaseMessage] = state.get("messages", [])
         execution_results = state.get("execution_results")
+        is_complex = state.get("is_complex")
         
         # Create a special message containing execution results for the LLM to see
         if execution_results:
@@ -60,8 +60,38 @@ class Finalizer(BaseAgent[FinalizationResponse]):
             messages_with_execution = messages + [execution_message]
         else:
             messages_with_execution = messages
-            
-        finalization, updated_history = self._invoke(messages_with_execution, node)
+        
+        finalization, updated_history = self._invoke(
+            messages_with_execution,
+            node,
+            is_complex=is_complex,
+        )
+
+        # Coerce any unstructured results into FinalizationResponse
+        if isinstance(finalization, FinalizationResponse):
+            pass
+        elif isinstance(finalization, str):
+            finalization = FinalizationResponse(
+                is_complete=True,
+                response=finalization,
+                reasoning="",
+            )
+        elif isinstance(finalization, dict):
+            try:
+                finalization = FinalizationResponse.model_validate(finalization)
+            except Exception:
+                finalization = FinalizationResponse(
+                    is_complete=True,
+                    response=str(finalization),
+                    reasoning="",
+                )
+        else:
+            # Handle numbers, lists, or any other type by stringifying
+            finalization = FinalizationResponse(
+                is_complete=True,
+                response=str(finalization),
+                reasoning="",
+            )
 
         next_node = self._get_next_step(finalization, state.get("is_partial", False))
 

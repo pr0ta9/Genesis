@@ -19,6 +19,7 @@ import os
 import sys
 import mimetypes
 import base64
+import argparse
 from datetime import datetime
 from pathlib import Path
 from typing import List, Optional, Dict, Any, Union
@@ -46,10 +47,10 @@ from langchain_core.messages import HumanMessage, AIMessage
 class GenesisApp:
     """Main Genesis application with chat loop and multimodal file handling."""
     
-    def __init__(self):
-        """Initialize the Genesis application."""
+    def __init__(self, orchestrator: Orchestrator):
+        """Initialize the Genesis CLI application."""
         self.logger = get_logger(__name__)
-        self.orchestrator = Orchestrator()
+        self.orchestrator = orchestrator
         self.conversation_history = []
         self.thread_id = f"main_session_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
         
@@ -412,13 +413,47 @@ class GenesisApp:
 
 
 def main():
-    """Main entry point."""
+    """Main entry point for Genesis CLI."""
+    parser = argparse.ArgumentParser(
+        description="Genesis AI Assistant - Multimodal AI with LangGraph orchestration",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  python main.py                    # Run CLI mode
+  python main.py --help             # Show help
+        """
+    )
+    
+    args = parser.parse_args()
+    
     # Set up environment
     os.environ.setdefault("GENESIS_PROJECT_ROOT", PROJECT_ROOT)
     
-    # Run the app
-    app = GenesisApp()
-    app.run()
+    # Create single orchestrator instance
+    print("🔧 Initializing Genesis orchestrator...")
+    try:
+        orchestrator = Orchestrator()
+        print("✅ Orchestrator initialized successfully")
+    except Exception as e:
+        print(f"❌ Failed to initialize orchestrator: {e}")
+        sys.exit(1)
+    
+    # Always run CLI mode
+    print("💬 Starting CLI mode...")
+    run_cli_mode(orchestrator)
+
+
+def run_cli_mode(orchestrator: Orchestrator):
+    """Run Genesis in CLI mode."""
+    try:
+        app = GenesisApp(orchestrator)
+        app.run()
+    except Exception as e:
+        print(f"\n💥 CLI error: {e}")
+        sys.exit(1)
+
+
+    
 
 
 if __name__ == "__main__":

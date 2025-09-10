@@ -1,5 +1,6 @@
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Generator
+from pathlib import Path
 
 from langgraph.graph import StateGraph, START, END
 from langchain_core.messages import AnyMessage, HumanMessage
@@ -14,6 +15,7 @@ from .executor.conversion import convert_path_to_hybrid_graph
 from .executor.execution import ExecutionOrchestrator, ExecutionResult
 from .tools.agent_tools import search
 from .logging_utils import get_logger, pretty, format_messages, log_section
+from .streaming import emit_status, StreamingContext, StatusType
 
 
 class Orchestrator:
@@ -29,8 +31,13 @@ class Orchestrator:
 
         # Initialize path finder (registry + generator)
         self.registry = ToolRegistry()
-        # Auto-register all decorated tools from tools/path_tools directory
-        self.registry.auto_register_from_directory("src/tools/path_tools")
+        # Auto-register all decorated tools from tools/path_tools directory (absolute path)
+        tools_dir = str((Path(__file__).resolve().parent / "tools" / "path_tools"))
+        self.registry.auto_register_from_directory(tools_dir)
+        try:
+            self.logger.info("Path registry loaded %d tool(s): %s", len(self.registry.tools), list(self.registry.tools.keys()))
+        except Exception:
+            pass
         self.path_finder = PathGenerator(self.registry)
 
         # Initialize executor orchestrator
@@ -58,7 +65,40 @@ class Orchestrator:
         def classify_node(state: State) -> list[dict]:
             self.logger.info("Entering state: classify")
             self.logger.debug("State messages before classify:\n%s", format_messages(state.get("messages", [])))
-            return self.classifier.classify(state)
+            
+            # Check if we have a streaming context
+            # from .streaming import get_stream_writer
+            # stream_writer = get_stream_writer()
+            
+            # if stream_writer and hasattr(self.classifier, 'classify_stream'):
+            #     # Use streaming version
+            #     for update_type, content in self.classifier.classify_stream(state):
+            #         print(f"result in classify_node: {update_type}")
+            #         if update_type == "reasoning":
+            #             # Emit reasoning through the streaming context
+            #             emit_status(
+            #                 type=StatusType.REASONING,
+            #                 node="classify",
+            #                 content=content
+            #             )
+            #         elif update_type == "result":
+            #             # Emit state update before returning
+            #             emit_status(
+            #                 type=StatusType.STATE_UPDATE,
+            #                 node="classify",
+            #                 state_update=content
+            #             )
+            #             return content
+            # else:
+                # Use regular version
+            result = self.classifier.classify(state)
+            # Emit state update
+            emit_status(
+                type=StatusType.STATE_UPDATE,
+                node="classify",
+                state_update=result
+            )
+            return result
 
         def find_path_node(state: State) -> list[dict]:
             self.logger.info("Entering state: find_path")
@@ -83,16 +123,50 @@ class Orchestrator:
             log_section(self.logger, "find_path all candidate paths", path_dicts, level=logging.DEBUG)
             log_section(self.logger, "find_path unique tools", [tool.to_dict() for tool in unique_tools_by_name.values()], level=logging.DEBUG)
 
-            return {
-                "all_paths": path_dicts,
-                # Store serializable tool metadata dicts
-                "tool_metadata": [tool.to_dict() for tool in unique_tools_by_name.values()],
+            # Sanitize tool metadata for router prompt: hide output_path param from LLM
+            def _sanitize_tool_dict(d: Dict[str, Any]) -> Dict[str, Any]:
+                sd = dict(d)
+                try:
+                    if isinstance(sd.get("input_params"), list):
+                        sd["input_params"] = [p for p in sd["input_params"] if p != "output_path"]
+                    if isinstance(sd.get("required_inputs"), dict) and "output_path" in sd["required_inputs"]:
+                        sd["required_inputs"].pop("output_path", None)
+                except Exception:
+                    pass
+                return sd
+
+            # Sanitize all_paths tool items as well
+            sanitized_paths: List[List[Dict[str, Any]]] = []
+            for path in path_dicts:
+                sanitized_paths.append([_sanitize_tool_dict(t) for t in path])
+
+            result = {
+                "all_paths": sanitized_paths,
+                # Store serializable tool metadata dicts (sanitized)
+                "tool_metadata": [_sanitize_tool_dict(tool.to_dict()) for tool in unique_tools_by_name.values()],
+                "next_node": "route",
             }
+            
+            # Emit state update via streaming
+            emit_status(
+                type=StatusType.STATE_UPDATE,
+                node="find_path",
+                state_update=result
+            )
+            
+            return result
 
         def route_node(state: State) -> list[dict]:
             self.logger.info("Entering state: route")
             self.logger.debug("Messages before route:\n%s", format_messages(state.get("messages", [])))
-            return self.router.route(state)
+            result = self.router.route(state)
+            # Emit state update
+            emit_status(
+                type=StatusType.STATE_UPDATE,
+                node="route",
+                state_update=result
+            )
+            return result
 
         def execute_node(state: State) -> list[dict]:
             self.logger.info("Entering state: execute")
@@ -128,18 +202,36 @@ class Orchestrator:
 
             # Build workflow and execute
             workflow = convert_path_to_hybrid_graph(chosen_path, exec_state_schema)
+            
             result: ExecutionResult = self._graph_executor.execute_workflow(
                 workflow=workflow,
                 path_object=chosen_path,
                 initial_state=exec_initial_state,
             )
             log_section(self.logger, "execute result", result, level=logging.INFO)
+            
             # Convert ExecutionResult to serializable dict for LangGraph state
-            return {"execution_results": result.to_dict()}
+            execution_dict = {"execution_results": result.to_dict(), "next_node": "finalize"}
+            
+            # Emit state update
+            emit_status(
+                type=StatusType.STATE_UPDATE,
+                node="execute",
+                state_update=execution_dict
+            )
+            
+            return execution_dict
 
         def finalize_node(state: State) -> list[dict]:
             self.logger.info("Entering state: finalize")
-            return self.finalizer.finalize(state)
+            result = self.finalizer.finalize(state)
+            # Emit state update
+            emit_status(
+                type=StatusType.STATE_UPDATE,
+                node="finalize",
+                state_update=result
+            )
+            return result
         
         def feedback_node(state: State) -> Dict[str, Any]:
             self.logger.info("Entering state: waiting_for_feedback")
@@ -322,5 +414,51 @@ class Orchestrator:
                 "thread_id": thread_id,
                 "error": f"{type(e).__name__}: {str(e)}"  # Also include at top level
             }
-
+    
+    def run_with_streaming(
+        self, 
+        messages: List[AnyMessage], 
+        thread_id: str = "default",
+        reasoning_callback=None
+    ) -> Generator[tuple[str, Any], None, None]:
+        """
+        Execute orchestrator workflow with streaming reasoning support.
+        
+        This is a wrapper around the regular run() that adds reasoning streaming.
+        The graph execution remains unchanged - we just intercept reasoning emissions.
+        
+        Args:
+            messages: List of messages to process
+            thread_id: Thread ID for conversation state
+            reasoning_callback: Optional callback for reasoning updates
+            
+        Yields:
+            Tuple of (update_type, content) where:
+            - ("reasoning", reasoning_text) for real-time reasoning from agents
+            - ("result", final_state) for final orchestrator result
+        """
+        # Import streaming utilities
+        from .streaming import StreamingContext
+        
+        # Collect reasoning events
+        reasoning_events = []
+        
+        def stream_collector(event):
+            """Collect streaming events"""
+            if event.type.value == "reasoning":
+                reasoning_events.append(event.content)
+                if reasoning_callback:
+                    reasoning_callback(event.content)
+        
+        # Run the graph with streaming context
+        with StreamingContext(stream_collector):
+            # Let the graph run normally - nodes that support streaming will emit events
+            result = self.run(messages, thread_id)
+        
+        # Yield all collected reasoning events
+        for reasoning in reasoning_events:
+            yield ("reasoning", reasoning)
+        
+        # Yield final result
+        yield ("result", result)
 

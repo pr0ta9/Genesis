@@ -1,6 +1,9 @@
 import logging
 import json
 from typing import Any, Iterable, List, Dict, Union
+from pathlib import Path
+import os
+import re
 from typing import Callable
 
 
@@ -233,3 +236,49 @@ def log_section(logger: logging.Logger, title: str, obj: Any | None = None, leve
         logger.log(level, "%s", divider)
 
 
+
+def _get_project_root() -> Path:
+    """Resolve project root from env or current working directory."""
+    root = os.environ.get("GENESIS_PROJECT_ROOT") or os.getcwd()
+    return Path(root).resolve()
+
+
+def _sanitize_component(name: str) -> str:
+    """Make a safe filename component (keep alnum, dash, underscore)."""
+    safe = re.sub(r"[^A-Za-z0-9._-]+", "_", name or "step")
+    return safe.strip("._-") or "step"
+
+
+def build_step_file_prefix(
+    conversation_id: str,
+    message_id: str | int,
+    step_index: int,
+    tool_name: str,
+) -> Path:
+    """
+    Build outputs path prefix for a step's artifacts.
+
+    Example: <root>/outputs/<conversation_id>/<message_id>/01_image_ocr
+    """
+    conv = _sanitize_component(str(conversation_id))
+    msg = _sanitize_component(str(message_id))
+    step = int(step_index) if step_index is not None else 0
+    tool = _sanitize_component(tool_name)
+
+    outputs_dir = _get_project_root() / "outputs" / conv / msg
+    outputs_dir.mkdir(parents=True, exist_ok=True)
+    filename = f"{step:02d}_{tool}"
+    return outputs_dir / filename
+
+
+def open_log_writers(prefix: Path):
+    """
+    Open stdout/stderr log files for a given prefix and return
+    (stdout_path, stderr_path, stdout_file, stderr_file).
+    """
+    prefix.parent.mkdir(parents=True, exist_ok=True)
+    stdout_path = prefix.with_name(f"{prefix.name}_stdout.log")
+    stderr_path = prefix.with_name(f"{prefix.name}_stderr.log")
+    stdout_file = open(stdout_path, "a", encoding="utf-8", buffering=1)
+    stderr_file = open(stderr_path, "a", encoding="utf-8", buffering=1)
+    return stdout_path, stderr_path, stdout_file, stderr_file
