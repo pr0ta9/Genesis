@@ -249,16 +249,18 @@ class ToolRegistry:
                         for i, d in enumerate(defaults):
                             param_name = pos_args[start + i].arg
                             try:
-                                default_params[param_name] = ast.literal_eval(d)
+                                value = ast.literal_eval(d)
                             except Exception:
-                                default_params[param_name] = self._ast_to_string(d)
+                                value = self._ast_to_string(d)
+                            default_params[param_name] = value
                     # Keyword-only defaults
-                    for kw, d in zip(args.kwonlyargs, args.kw_defaults):
+                    for kw, d in zip(getattr(args, 'kwonlyargs', []), getattr(args, 'kw_defaults', []) or []):
                         if d is not None:
                             try:
-                                default_params[kw.arg] = ast.literal_eval(d)
+                                value = ast.literal_eval(d)
                             except Exception:
-                                default_params[kw.arg] = self._ast_to_string(d)
+                                value = self._ast_to_string(d)
+                            default_params[kw.arg] = value
                     break
         except Exception:
             default_params = {}
@@ -279,7 +281,6 @@ class ToolRegistry:
         
         # Store module info for lazy loading
         tool_metadata._module_name = meta["module_name"]
-        
         self.register_tool(tool_metadata)
 
     def _module_name_to_path(self, module_name: str) -> str:
@@ -290,4 +291,20 @@ class ToolRegistry:
             relative = Path(*parts[idx:])
         except ValueError:
             relative = Path(*parts)
-        return str(relative.with_suffix('.py'))
+
+        # Detect project root containing the top-level 'src' directory
+        def _detect_project_root() -> Path:
+            here = Path(__file__).resolve()
+            for parent in here.parents:
+                if (parent / 'src').exists():
+                    return parent
+            # Fallback to current working directory
+            return Path.cwd()
+
+        project_root = _detect_project_root()
+        abs_path = (project_root / relative).with_suffix('.py')
+        try:
+            print(f"[Registry Debug] _module_name_to_path -> module='{module_name}' abs='{abs_path}' exists={abs_path.exists()}")
+        except Exception:
+            pass
+        return str(abs_path)

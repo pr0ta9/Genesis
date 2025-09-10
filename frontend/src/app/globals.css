@@ -1,0 +1,104 @@
+@import "tailwindcss";
+
+:root {
+  --background: #ffffff;
+  --foreground: #171717;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #ffffff;
+    --foreground: #171717;
+  }
+}
+
+html, body, #__next {
+  height: 100%;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans), system-ui, -apple-system, sans-serif;
+  margin: 0;
+  padding: 0;
+}
+
+/* Smart scrollbar that doesn't shift layout */
+.scrollbar-smart {
+  scrollbar-gutter: stable;
+  scrollbar-width: none;
+  scrollbar-color: transparent transparent;
+}
+
+.scrollbar-smart::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.scrollbar-smart::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.scrollbar-smart::-webkit-scrollbar-thumb {
+  background: transparent;
+  border-radius: 4px;
+  transition: background-color 0.2s ease;
+}
+
+.scrollbar-smart::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* Completely remove arrow buttons */
+.scrollbar-smart::-webkit-scrollbar-button {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+}
+
+.scrollbar-smart::-webkit-scrollbar-button:start:decrement,
+.scrollbar-smart::-webkit-scrollbar-button:end:increment {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+}
+
+/* Only show scrollbar when actively scrolling */
+.scrollbar-smart.scrolling {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(0, 0, 0, 0.2) transparent;
+}
+
+.scrollbar-smart.scrolling::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.2);
+}
+
+.scrollbar-smart.scrolling::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 0, 0, 0.3);
+}
+
+/* Alternative approach: Use a wrapper for hover detection on scrollbar area only */
+.scrollbar-hover-zone {
+  position: relative;
+}
+
+.scrollbar-hover-zone::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 12px;
+  height: 100%;
+  z-index: 10;
+  pointer-events: none;
+}
+
+.scrollbar-hover-zone:hover .scrollbar-smart::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.2);
+}
+
+.scrollbar-hover-zone:hover .scrollbar-smart {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(0, 0, 0, 0.2) transparent;
+}

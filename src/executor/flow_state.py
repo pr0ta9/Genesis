@@ -11,6 +11,7 @@ Type validation happens elsewhere during path generation.
 """
 
 from typing import Any, Dict, List, Optional, TypedDict
+from ..path.models import PathItem  # type: ignore
 
 
 class StateGenerator:
@@ -21,7 +22,7 @@ class StateGenerator:
     Similar to LangGraph's StateGraph pattern.
     """
     
-    def __init__(self, path_object: List[Dict[str, Any]]):
+    def __init__(self, path_object: List[PathItem]):
         """
         Initialize the state generator with a path object.
         
@@ -57,11 +58,14 @@ class StateGenerator:
         }
         
         for tool_spec in self.path_object:
-            param_types = tool_spec.get("param_types", {})
-            param_values = tool_spec.get("param_values", {})
-            
+            # PathItem-based specs only
+            param_types = tool_spec.param_types or {}
+            param_values = tool_spec.param_values or {}
+            input_params = tool_spec.input_params or []
+            output_params = tool_spec.output_params or []
+
             # Process all parameters (input + output) in one loop
-            all_params = tool_spec.get("input_params", []) + tool_spec.get("output_params", [])
+            all_params = input_params + output_params
             
             for param_name in all_params:
                 # Get type (default to Any if not specified)
@@ -129,7 +133,8 @@ class StateGenerator:
             return None
             
         # Get last tool's output parameter
-        last_tool_outputs = self.path_object[-1].get("output_params", [])
+        last_spec = self.path_object[-1]
+        last_tool_outputs = last_spec.output_params or []
         if last_tool_outputs:
             return state.get(last_tool_outputs[0])
         

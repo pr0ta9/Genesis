@@ -16,9 +16,13 @@ import tempfile
 import json
 import pickle
 import shutil
+import threading
 from pathlib import Path
-from typing import Any, Dict, Tuple, Optional, Set
+from typing import Any, Dict, Tuple, Set
+from ..path.models import PathItem  # type: ignore
 import uuid
+from src.streaming import emit_status, StatusType
+from src.logging_utils import build_step_file_prefix, open_log_writers
 
 
 # Tools that should be isolated in SMART mode
@@ -116,7 +120,7 @@ def should_isolate(tool_name: str) -> bool:
 
 
 def identify_non_serializable_params(tool_spec: Dict[str, Any]) -> Set[str]:
-    """Identify parameters that cannot be JSON-serialized."""
+    """Identify parameters that cannot be JSON-serialized (dict-based helper for isolation)."""
     non_serializable = set()
     param_types = tool_spec.get("param_types", {})
     
@@ -143,21 +147,19 @@ def _build_isolated_script(
 ) -> str:
     """Generate Python script for isolated tool execution."""
     
-    # Build kwargs loading code
+    # Build kwargs loading code (include all provided params, not just input_params)
     kwargs_setup = []
-    for param in input_params:
-        if param in param_values:
-            value = param_values[param]
-            if isinstance(value, str) and value.startswith("${") and value.endswith("}"):
-                # Reference to another tool's output
-                ref = value[2:-1]  # Remove ${ and }
-                kwargs_setup.append(f'kwargs["{param}"] = state_store.get("{ref}")')
-            elif param in non_serializable_params:
-                # Non-serializable object - use pickled reference
-                kwargs_setup.append(f'kwargs["{param}"] = state_store.get_pickled("{tool_name}.{param}")')
-            else:
-                # Direct value
-                kwargs_setup.append(f'kwargs["{param}"] = {repr(value)}')
+    for param, value in (param_values or {}).items():
+        if isinstance(value, str) and value.startswith("${") and value.endswith("}"):
+            # Reference to another tool's output
+            ref = value[2:-1]  # Remove ${ and }
+            kwargs_setup.append(f'kwargs["{param}"] = state_store.get("{ref}")')
+        elif param in non_serializable_params:
+            # Non-serializable object - use pickled reference
+            kwargs_setup.append(f'kwargs["{param}"] = state_store.get_pickled("{tool_name}.{param}")')
+        else:
+            # Direct value
+            kwargs_setup.append(f'kwargs["{param}"] = {repr(value)}')
     
     kwargs_code = "\n".join(kwargs_setup) if kwargs_setup else "pass"
     
@@ -231,14 +233,14 @@ def run_tool_isolated(
     Returns:
         The function's return value (from state store)
     """
-    tool_name = tool_spec["name"]
+    tool_name = tool_spec.name if isinstance(tool_spec, PathItem) else tool_spec["name"]
     
     # Get module and function info
     if tool_name in ISOLATED_TOOL_MAP:
         module_path, function_name = ISOLATED_TOOL_MAP[tool_name]
     else:
         # Try to extract from function object
-        func = tool_spec.get("function")
+        func = tool_spec.function if isinstance(tool_spec, PathItem) else tool_spec.get("function")
         if func:
             module_path = getattr(func, "__module__", None)
             function_name = getattr(func, "__name__", None)
@@ -252,7 +254,9 @@ def run_tool_isolated(
     
     # Initialize state store and save non-serializable objects
     state_store = StateStore(workspace_dir)
-    param_values = tool_spec.get("param_values", {})
+    param_values = tool_spec.param_values if isinstance(tool_spec, PathItem) else tool_spec.get("param_values", {})
+    if param_values is None:
+        param_values = {}
     
     for param in non_serializable_params:
         if param in param_values:
@@ -265,8 +269,8 @@ def run_tool_isolated(
         module_path=module_path,
         function_name=function_name,
         tool_name=tool_name,
-        input_params=tool_spec.get("input_params", []),
-        output_params=tool_spec.get("output_params", []),
+        input_params=(tool_spec.input_params if isinstance(tool_spec, PathItem) else tool_spec.get("input_params", [])) or [],
+        output_params=(tool_spec.output_params if isinstance(tool_spec, PathItem) else tool_spec.get("output_params", [])) or [],
         param_values=param_values,
         workspace_dir=workspace_dir,
         non_serializable_params=non_serializable_params
@@ -282,27 +286,132 @@ def run_tool_isolated(
     if extra_env:
         env.update(extra_env)
     
-    # Execute script
-    proc = subprocess.run(
+    # Prepare log writers if context is available
+    conversation_id = os.environ.get("GENESIS_CONVERSATION_ID")
+    message_id = os.environ.get("GENESIS_MESSAGE_ID")
+    step_index_str = os.environ.get("GENESIS_STEP_INDEX")
+    step_index = int(step_index_str) if (step_index_str and step_index_str.isdigit()) else None
+    stdout_file = stderr_file = None
+    if conversation_id and message_id and step_index is not None:
+        try:
+            prefix = build_step_file_prefix(conversation_id, message_id, step_index, tool_name)
+            _, _, stdout_file, stderr_file = open_log_writers(prefix)
+        except Exception:
+            pass
+
+    # Execute script with streaming stdout/stderr
+    proc = subprocess.Popen(
         [sys.executable, str(script_path)],
         cwd=project_root or None,
         env=env,
-        capture_output=True,
-        text=True
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        bufsize=1
     )
-    
-    if proc.returncode != 0:
+
+    def _reader(stream, is_stdout: bool):
+        try:
+            for line in iter(stream.readline, ''):
+                if not line:
+                    break
+                try:
+                    if is_stdout and stdout_file:
+                        stdout_file.write(line)
+                    if (not is_stdout) and stderr_file:
+                        stderr_file.write(line)
+                except Exception:
+                    pass
+                try:
+                    emit_status(
+                        type=StatusType.EXECUTION_EVENT,
+                        node=tool_name,
+                        event={
+                            "status": "stdout_line" if is_stdout else "stderr_line",
+                            "tool_name": tool_name,
+                            "line": line.rstrip("\n"),
+                            "conversation_id": conversation_id,
+                            "message_id": message_id,
+                            "step_index": step_index
+                        }
+                    )
+                except Exception:
+                    pass
+        finally:
+            try:
+                stream.close()
+            except Exception:
+                pass
+
+    threads = []
+    if proc.stdout is not None:
+        t_out = threading.Thread(target=_reader, args=(proc.stdout, True), daemon=True)
+        threads.append(t_out)
+        t_out.start()
+    if proc.stderr is not None:
+        t_err = threading.Thread(target=_reader, args=(proc.stderr, False), daemon=True)
+        threads.append(t_err)
+        t_err.start()
+
+    rc = proc.wait()
+    for t in threads:
+        try:
+            t.join(timeout=0.2)
+        except Exception:
+            pass
+    if stdout_file:
+        try:
+            stdout_file.flush(); stdout_file.close()
+        except Exception:
+            pass
+    if stderr_file:
+        try:
+            stderr_file.flush(); stderr_file.close()
+        except Exception:
+            pass
+
+    if rc != 0:
         raise RuntimeError(
-            f"Isolated tool '{tool_name}' failed (rc={proc.returncode})\n"
-            f"STDOUT:\n{proc.stdout}\nSTDERR:\n{proc.stderr}"
+            f"Isolated tool '{tool_name}' failed (rc={rc})"
         )
     
     # Return the output from state store
-    output_params = tool_spec.get("output_params", [])
+    output_params = (tool_spec.output_params if isinstance(tool_spec, PathItem) else tool_spec.get("output_params", [])) or []
     if not output_params:
         return None
     elif len(output_params) == 1:
-        return state_store.get(f"{tool_name}.{output_params[0]}")
+        main_key = output_params[0]
+        value = state_store.get(f"{tool_name}.{main_key}")
+        # Optionally write a preview for non-file results, but always return the true value for chaining
+        try:
+            if conversation_id and message_id and step_index is not None and not (isinstance(value, str) and Path(value).exists()):
+                prefix = build_step_file_prefix(conversation_id, message_id, step_index, tool_name)
+                txt_path = prefix.with_suffix(".txt")
+                txt_path.parent.mkdir(parents=True, exist_ok=True)
+                try:
+                    content = json.dumps(value, indent=2, ensure_ascii=False)
+                except Exception:
+                    content = str(value)
+                txt_path.write_text(content, encoding="utf-8")
+                try:
+                    emit_status(
+                        type=StatusType.EXECUTION_EVENT,
+                        node=tool_name,
+                        event={
+                            "status": "file_saved",
+                            "tool_name": tool_name,
+                            "path": str(txt_path),
+                            "mime": "text/plain",
+                            "conversation_id": conversation_id,
+                            "message_id": message_id,
+                            "step_index": step_index
+                        }
+                    )
+                except Exception:
+                    pass
+        except Exception:
+            pass
+        return value
     else:
         # Return dict of all outputs
         return {param: state_store.get(f"{tool_name}.{param}") for param in output_params}
@@ -315,7 +424,7 @@ class IsolatedGraphExecutor:
         self.project_root = project_root
         self.workspace_dir = None
     
-    def execute_path(self, path_object: list, initial_state: Dict[str, Any]) -> Dict[str, Any]:
+    def execute_path(self, path_object: list[PathItem], initial_state: Dict[str, Any]) -> Dict[str, Any]:
         """Execute path with each tool in a separate process.
         
         Args:
@@ -339,13 +448,13 @@ class IsolatedGraphExecutor:
             
             # Execute each tool
             for tool_spec in path_object:
-                tool_name = tool_spec["name"]
+                tool_name = tool_spec.name
                 print(f"\n=== Executing tool: {tool_name} ===")
                 
                 if should_isolate(tool_name):
                     # Run in isolated process
                     result = run_tool_isolated(
-                        tool_spec=tool_spec,
+                        tool_spec=tool_spec.model_dump(),
                         workspace_dir=self.workspace_dir,
                         project_root=self.project_root
                     )
@@ -377,13 +486,13 @@ class IsolatedGraphExecutor:
                 if self.workspace_dir and self.workspace_dir.exists():
                     shutil.rmtree(self.workspace_dir, ignore_errors=True)
     
-    def _run_tool_direct(self, tool_spec: Dict[str, Any], state_store: StateStore) -> Any:
+    def _run_tool_direct(self, tool_spec: PathItem, state_store: StateStore) -> Any:
         """Run a tool directly without isolation (for tools with non-serializable inputs)."""
-        func = tool_spec["function"]
-        input_params = tool_spec.get("input_params", [])
-        output_params = tool_spec.get("output_params", [])
-        param_values = tool_spec.get("param_values", {})
-        tool_name = tool_spec["name"]
+        func = tool_spec.function
+        input_params = tool_spec.input_params or []
+        output_params = tool_spec.output_params or []
+        param_values = tool_spec.param_values or {}
+        tool_name = tool_spec.name
         
         # Build kwargs
         kwargs = {}
@@ -396,10 +505,77 @@ class IsolatedGraphExecutor:
                     kwargs[param] = state_store.get(ref)
                 else:
                     kwargs[param] = value
-        
-        # Execute
-        result = func(**kwargs)
-        
+
+        # Prepare logging for direct calls
+        conversation_id = os.environ.get("GENESIS_CONVERSATION_ID")
+        message_id = os.environ.get("GENESIS_MESSAGE_ID")
+        step_index_str = os.environ.get("GENESIS_STEP_INDEX")
+        step_index = int(step_index_str) if (step_index_str and step_index_str.isdigit()) else None
+        stdout_file = stderr_file = None
+        if conversation_id and message_id and step_index is not None:
+            try:
+                prefix = build_step_file_prefix(conversation_id, message_id, step_index, tool_name)
+                _, _, stdout_file, stderr_file = open_log_writers(prefix)
+            except Exception:
+                pass
+
+        # Execute with basic print capture
+        import contextlib
+        import io
+        out_buf, err_buf = io.StringIO(), io.StringIO()
+        try:
+            with contextlib.redirect_stdout(out_buf), contextlib.redirect_stderr(err_buf):
+                result = func(**kwargs)
+        finally:
+            # Flush logs to files and emit events
+            out = out_buf.getvalue()
+            err = err_buf.getvalue()
+            if out:
+                for line in out.splitlines():
+                    try:
+                        if stdout_file:
+                            stdout_file.write(line + "\n")
+                        emit_status(
+                            type=StatusType.EXECUTION_EVENT,
+                            node=tool_name,
+                            event={
+                                "status": "stdout_line",
+                                "tool_name": tool_name,
+                                "line": line,
+                                "conversation_id": conversation_id,
+                                "message_id": message_id,
+                                "step_index": step_index
+                            }
+                        )
+                    except Exception:
+                        pass
+            if err:
+                for line in err.splitlines():
+                    try:
+                        if stderr_file:
+                            stderr_file.write(line + "\n")
+                        emit_status(
+                            type=StatusType.EXECUTION_EVENT,
+                            node=tool_name,
+                            event={
+                                "status": "stderr_line",
+                                "tool_name": tool_name,
+                                "line": line,
+                                "conversation_id": conversation_id,
+                                "message_id": message_id,
+                                "step_index": step_index
+                            }
+                        )
+                    except Exception:
+                        pass
+            try:
+                if stdout_file:
+                    stdout_file.flush(); stdout_file.close()
+                if stderr_file:
+                    stderr_file.flush(); stderr_file.close()
+            except Exception:
+                pass
+
         # Store outputs
         if len(output_params) == 1:
             state_store.set(f"{tool_name}.{output_params[0]}", result)
@@ -411,5 +587,5 @@ class IsolatedGraphExecutor:
                 for i, param in enumerate(output_params):
                     if i < len(result):
                         state_store.set(f"{tool_name}.{param}", result[i])
-        
+
         return result

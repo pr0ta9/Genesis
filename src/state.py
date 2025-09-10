@@ -2,7 +2,7 @@ from typing import Any, Dict, List, Optional, TypedDict
 from langgraph.graph.message import add_messages
 from langchain_core.messages import AnyMessage
 from typing_extensions import Annotated
-
+from .path import WorkflowTypeEnum, PathItem
 
 class State(TypedDict):
     # Control flow
@@ -12,18 +12,18 @@ class State(TypedDict):
     
     # Classify node results
     objective: str
-    input_type: str  # Type of input provided by the user
-    type_savepoint: List[str]  # The type of savepoint to use
+    input_type: WorkflowTypeEnum  # Type of input provided by the user
+    type_savepoint: List[WorkflowTypeEnum]  # The type of savepoint to use
     is_complex: bool  # Whether the task requires complex processing beyond simple web search
     classify_reasoning: str  # Explanation of the classification decision
     classify_clarification: Optional[str]  # Question to ask user if more information is needed
     
     # Path node results
-    tool_metadata: List[dict]  # Metadata about tools in the path
+    tool_metadata: List[Dict[str, Any]]  # Serializable metadata about tools in the path
     all_paths: List[dict]  # All possible paths discovered
 
     # Router node results
-    chosen_path: List[dict]  # The selected path for execution
+    chosen_path: List[PathItem]  # The selected path for execution
     route_reasoning: str  # Explanation of routing decision
     route_clarification: Optional[str]  # Question to ask user if more information is needed
     is_partial: bool  # Whether execution was partial/incomplete
