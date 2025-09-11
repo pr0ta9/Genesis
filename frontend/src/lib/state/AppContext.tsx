@@ -623,11 +623,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             // Handle both old reasoning log and new message-specific reasoning
             dispatch({
               type: "append_reasoning",
-              entry: { timestamp: d.timestamp, text: d.data?.reasoning ?? "", node: d.data?.node },
+              entry: { timestamp: d.timestamp, text: (d.data?.reasoning ?? d.data?.reasoning_content ?? ""), node: d.data?.node },
             });
             
             // Start reasoning if not already started and we have reasoning content
-            if (d.data?.reasoning && !state.currentReasoningMessageId && state.messages.length > 0) {
+            if ((d.data?.reasoning || d.data?.reasoning_content) && !state.currentReasoningMessageId && state.messages.length > 0) {
               // Find the most recent assistant message to attach reasoning to
               const lastAssistantMessage = [...state.messages].reverse().find(m => m.role === 'assistant');
               if (lastAssistantMessage) {
@@ -641,11 +641,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             
             // If there's a current reasoning message, update it
             if (state.currentReasoningMessageId) {
-              console.log("📝 Updating reasoning content:", d.data?.reasoning?.slice(0, 50));
+              const chunk = String(d.data?.reasoning ?? d.data?.reasoning_content ?? "");
+              try { console.log("📝 Updating reasoning content:", chunk.slice(0, 50)); } catch {}
               dispatch({
                 type: "update_reasoning",
                 messageId: state.currentReasoningMessageId,
-                reasoning: d.data?.reasoning ?? "",
+                reasoning: chunk,
                 isComplete: d.data?.complete || false
               });
               
@@ -672,8 +673,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
               const title = stageTitles[node] || node;
               dispatch({ type: "workflow_start_stage", messageId: fmId, node, title, status: title, startedAt: d.timestamp });
               // Append reasoning chunk if provided
-              if (d.data?.reasoning) {
-                dispatch({ type: "workflow_update_reasoning", messageId: fmId, node, text: String(d.data.reasoning) });
+              if (d.data?.reasoning || d.data?.reasoning_content) {
+                dispatch({ type: "workflow_update_reasoning", messageId: fmId, node, text: String(d.data?.reasoning ?? d.data?.reasoning_content) });
               }
               // Handle clarifications
               const clarify = d.data?.clarification || d.data?.clarify;
@@ -941,7 +942,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             
             // Extract response, reasoning, and frontend message ID
             const response = d.result?.response || d.response || "Response completed";
-            const reasoning = d.result?.reasoning || null;
+            const reasoning = d.result?.reasoning || d.result?.reasoning_content || null;
             const frontendMessageId = d.frontend_message_id;
             
             console.log("🎯 Complete event with frontend_message_id:", frontendMessageId);
@@ -1029,5 +1030,3 @@ export function useApp() {
   if (!ctx) throw new Error("useApp must be used within AppProvider");
   return ctx;
 }
-
-
