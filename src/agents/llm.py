@@ -18,6 +18,7 @@ def setup_llm(type: str, model_name: str, temperature: float = 0):
         return ChatOllama(
             model=model_name,
             temperature=temperature,
+            reasoning=True,
         )
     else:
         raise ValueError(f"Model {type} not supported")

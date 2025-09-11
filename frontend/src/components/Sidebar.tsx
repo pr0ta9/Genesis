@@ -205,7 +205,7 @@ export function Sidebar({ isCollapsed, onToggle }: SidebarProps) {
           </div>
 
           {/* Settings */}
-          <div className="flex items-center mb-4">
+          {/* <div className="flex items-center mb-4">
             <button className="w-full flex items-center space-x-3 px-3 py-2 text-gray-700 rounded-md hover:bg-gray-100 transition-colors">
               <div className="w-5 h-5 flex items-center justify-center">
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -215,7 +215,7 @@ export function Sidebar({ isCollapsed, onToggle }: SidebarProps) {
               </div>
               <span className="text-sm font-medium">Settings</span>
             </button>
-          </div>
+          </div> */}
 
           {/* Conversations Section */}
           <aside className="pt-4 last:mb-5" aria-labelledby="chats-section">

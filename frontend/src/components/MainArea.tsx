@@ -99,7 +99,7 @@ export default function MainArea() {
     <div ref={containerRef} className="h-full flex items-stretch select-none">
       <div className={`${showViz ? "flex-none" : "flex-1"}`} style={chatStyle}>
         <div className="min-w-[420px] h-full">
-          <Chat />
+          <Chat logoPath={"/genesis.svg"} logoSize={100} />
         </div>
       </div>
       {showViz && (

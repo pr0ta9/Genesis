@@ -1,0 +1,87 @@
+# GPU-enabled docker-compose for CUDA 12.x systems
+services:
+  # Ollama service (HEAVILY required by your code)
+  ollama:
+    image: ollama/ollama:latest
+    container_name: genesis-ollama-gpu
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_models:/root/.ollama
+    networks:
+      - genesis-network
+    restart: unless-stopped
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 20s
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.gpu-cuda12
+    container_name: genesis-backend-gpu
+    ports:
+      - "8000:8000"
+    environment:
+      - GENESIS_KEEP_WORKSPACE=1
+      - GENESIS_PROJECT_ROOT=/app
+      - DATABASE_URL=sqlite:///./genesis.db
+      - CORS_ORIGINS=["http://localhost:3000","http://frontend:3000"]
+      # Ollama configuration
+      - OLLAMA_BASE_URL=http://ollama:11434
+      - OLLAMA_HOST=ollama:11434
+    env_file:
+      - .env
+    volumes:
+      - genesis_data:/app/data
+      - genesis_tmp:/app/tmp
+      - genesis_inputs:/app/inputs
+      - genesis_outputs:/app/outputs
+      - genesis_db:/app/db
+    networks:
+      - genesis-network
+    restart: unless-stopped
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: genesis-frontend
+    ports:
+      - "3000:3000"
+    environment:
+      - NEXT_PUBLIC_API_BASE=http://localhost:8000
+    depends_on:
+      - backend
+    networks:
+      - genesis-network
+    restart: unless-stopped
+
+volumes:
+  genesis_data:
+  genesis_tmp:
+  genesis_inputs:
+  genesis_outputs:
+  genesis_db:
+  ollama_models:
+
+networks:
+  genesis-network:
+    driver: bridge
