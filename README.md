@@ -13,12 +13,22 @@ A sophisticated multimodal AI assistant with LangGraph orchestration, supporting
 
 ## Prerequisites
 
+### 🎥 Setup Video Tutorial
+
+[**🎬 Watch the Genesis Setup Guide →**](https://youtu.be/_Z7FD8-qf2M)
+
+[**🎬 Watch the Genesis Demo →**](https://youtu.be/EFJSrb2tZ-U)
+
+*Complete walkthrough for setting up Genesis AI Assistant*
+
 ### Required
+
 - **[Ollama](https://ollama.com/download)** - Local AI model runtime (required for AI functionality)
 - **Docker and Docker Compose** - For containerized deployment
 - **Git** - For version control
 
 ### For Local Development (Optional)
+
 - Python 3.12+ (backend development)
 - Node.js 20+ (frontend development)
 
@@ -40,6 +50,7 @@ ollama list
 **Model Information**: [OpenAI's gpt-oss models](https://ollama.com/library/gpt-oss) are designed for powerful reasoning, agentic tasks, and versatile developer use cases. The 20B model (14GB) is optimized for lower latency and can run on systems with as little as 16GB memory.
 
 ### Model Features
+
 - **Agentic capabilities**: Function calling, web browsing, Python tool calls, and structured outputs
 - **Full chain-of-thought**: Complete access to the model's reasoning process
 - **Configurable reasoning effort**: Adjust reasoning effort (low, medium, high) based on your use case
@@ -50,11 +61,13 @@ ollama list
 Create the required environment files:
 
 ### `.env` (Project Root)
+
 ```env
 GENESIS_KEEP_WORKSPACE=1
 ```
 
 ### `frontend/.env.local`
+
 ```env
 NEXT_PUBLIC_API_BASE=http://localhost:8000
 ```
@@ -62,6 +75,7 @@ NEXT_PUBLIC_API_BASE=http://localhost:8000
 ## Docker Quick Start
 
 ### Step 1: Ensure Ollama is Running
+
 Make sure Ollama is installed and the gpt-oss model is downloaded:
 
 ```bash
@@ -75,6 +89,7 @@ ollama pull gpt-oss:20b
 ### Step 2: Choose Your Deployment Mode
 
 #### CPU Mode (Default - Recommended)
+
 Uses your host system's Ollama for best performance:
 
 ```bash
@@ -89,6 +104,7 @@ docker-compose down
 ```
 
 #### GPU Mode (NVIDIA GPU Acceleration) - ⚠️ EXPERIMENTAL
+
 For systems with CUDA-compatible GPUs, uses official PyTorch CUDA 12.8 image:
 
 ⚠️ **Stability Warning**: The GPU version is not fully tested across different environments and uses CUDA 12.8, which may have compatibility issues with some GPU setups. **We recommend using the CPU version for production use.**
@@ -105,11 +121,13 @@ docker-compose -f docker-compose.yml -f docker-compose.gpu.yml down
 ```
 
 **GPU Requirements:**
+
 - NVIDIA GPU with CUDA 12.8+ support
 - NVIDIA Docker runtime installed
 - 12GB+ GPU memory recommended
 
 #### Development Mode
+
 For development with hot reload:
 
 ```bash
@@ -118,9 +136,10 @@ docker-compose -f docker-compose.yml -f docker-compose.dev.yml up -d
 ```
 
 ### Step 3: Access the Application
-- **Frontend**: http://localhost:3000
-- **Backend API**: http://localhost:8000
-- **API Documentation**: http://localhost:8000/docs
+
+- **Frontend**: <http://localhost:3000>
+- **Backend API**: <http://localhost:8000>
+- **API Documentation**: <http://localhost:8000/docs>
 
 ## Available Tools & Testing
 
@@ -129,9 +148,11 @@ Genesis comes with a comprehensive set of AI tools for multimodal processing:
 ### 🛠️ Available Tools
 
 #### Agent Tools
+
 - **`web_search`** - Web search functionality using DuckDuckGo
 
 #### Path Tools (Image & Audio Processing)
+
 - **`denoise`** - Audio noise suppression using acoustic models
 - **`erase`** - Intelligent text removal from images using LaMa inpainting
 - **`ocr`** - Optical Character Recognition for images and PDFs (PaddleOCR)
@@ -146,12 +167,14 @@ The project includes sample files for testing functionality:
 - **`tests/examples/test.wav`** - Sample audio file for testing audio denoising
 
 **Usage Example:**
-1. Upload the test image through the frontend at http://localhost:3000
+
+1. Upload the test image through the frontend at <http://localhost:3000>
 2. Try OCR to extract text from the image
 3. Use the erase tool to remove detected text
 4. Upload the test audio to experiment with denoising
 
 ### 🎯 Workflow Examples
+
 - **Document Processing**: Upload image → OCR → Translate → Export
 - **Image Cleanup**: Upload image → OCR → Erase text → Save clean image
 - **Audio Enhancement**: Upload audio → Denoise → Download clean audio
@@ -159,19 +182,23 @@ The project includes sample files for testing functionality:
 ## Deployment Options
 
 ### Option 1: Host Ollama (Default - Recommended)
+
 The default configuration uses your system's Ollama installation:
 
 ✅ **Benefits:**
+
 - Better performance (no Docker overhead)
 - Uses existing Ollama models and configuration  
 - Simpler resource management
 - Faster startup times
 
 ✅ **Requirements:**
+
 - Ollama installed and running on host
 - gpt-oss model downloaded (`ollama pull gpt-oss:20b`)
 
 ### Option 2: Docker Ollama (Alternative)
+
 If you prefer a fully containerized setup, you can uncomment the Ollama service in `docker-compose.yml` and change the backend environment variables:
 
 ```yaml
@@ -182,6 +209,7 @@ If you prefer a fully containerized setup, you can uncomment the Ollama service 
 ```
 
 Then run the setup script to download models into the container:
+
 ```bash
 # Windows
 setup-models.bat
@@ -195,34 +223,55 @@ chmod +x setup-models.sh && ./setup-models.sh
 ### Common Issues
 
 **"Cannot connect to Ollama"**
+
 - Ensure Ollama is running: `ollama list`
 - Check if gpt-oss model is available: `ollama pull gpt-oss:20b`
 - Verify Ollama is accessible on port 11434
 
 **Frontend cannot connect to backend**
+
 - Frontend connects to `localhost:8000` (not `backend:8000`)
 - Ensure Docker port mapping is correct (8000:8000)
 
 **GPU mode not working**
+
 - Ensure NVIDIA Docker runtime is installed
 - Verify CUDA compatibility with your GPU
 - Check Docker GPU access: `docker run --rm --gpus all nvidia/cuda:12.0-runtime-ubuntu22.04 nvidia-smi`
 
+**If process didn't run correctly**
+
+- Check backend logs for details
+- For image OCR/translation tasks, also review stderr/stdout logs inside `backend/outputs/...`
+- Example log locations:
+  - `backend/outputs/conv_20250910_211003_6e797bb2/11/01_image_ocr_stderr.log`
+  - `backend/outputs/conv_20250910_211003_6e797bb2/11/01_image_ocr_stdout.log`
+
+**Image translation first run (PaddleOCR models)**
+
+- The first run may take time while PaddleOCR models are downloaded and cached locally
+- If the backend shows a 403 error during model download, your machine may be unable to reach the Paddle model host
+- See the [PaddleOCR repository](https://github.com/PaddlePaddle/PaddleOCR) for details and guidance
+- After models download successfully once, they are stored locally and future runs should not encounter this issue
+
 ## System Requirements
 
 ### Minimum (CPU Mode - Recommended)
+
 - 16GB RAM (for gpt-oss:20b model)
 - 20GB free disk space
 - CPU with AVX2 support
 - Ollama installed with gpt-oss:20b model
 
 ### GPU Mode (Experimental - Not Recommended for Production)
+
 - 24GB+ RAM
 - NVIDIA RTX 40/50 series GPU with 12GB+ VRAM
 - CUDA 12.8+ compatible drivers (compatibility issues possible)
 - Docker with NVIDIA container runtime
 
 ### Enterprise (120B model)
+
 - 80GB+ RAM or GPU memory
 - High-end workstation or server setup
 - Ollama with gpt-oss:120b model
@@ -253,6 +302,7 @@ Genesis/
 ### Local Development Setup
 
 1. **Backend Development**:
+
 ```bash
 cd backend
 python -m venv venv
@@ -264,6 +314,7 @@ python -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
 2. **Frontend Development**:
+
 ```bash
 cd frontend
 npm install
