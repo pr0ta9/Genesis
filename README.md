@@ -17,6 +17,8 @@ A sophisticated multimodal AI assistant with LangGraph orchestration, supporting
 
 [**🎬 Watch the Genesis Setup Guide →**](https://youtu.be/_Z7FD8-qf2M)
 
+[**🎬 Watch the Genesis Demo →**](https://youtu.be/EFJSrb2tZ-U)
+
 *Complete walkthrough for setting up Genesis AI Assistant*
 
 ### Required
