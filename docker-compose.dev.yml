@@ -21,7 +21,7 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
-      target: base  # Stop at base for development
+      target: deps  # Preinstall node_modules for dev
     volumes:
       # Mount source code for development
       - ./frontend/src:/app/src
@@ -29,8 +29,10 @@ services:
       - ./frontend/package.json:/app/package.json
       - ./frontend/next.config.ts:/app/next.config.ts
       - ./frontend/tsconfig.json:/app/tsconfig.json
-      - ./frontend/tailwind.config.js:/app/tailwind.config.js
       - ./frontend/postcss.config.mjs:/app/postcss.config.mjs
     environment:
       - NODE_ENV=development
-    command: ["npm", "run", "dev"]
+      - NEXT_PUBLIC_API_BASE=http://localhost:8000
+    ports:
+      - "3000:3000"
+    command: ["npm", "run", "dev", "--", "-H", "0.0.0.0", "-p", "3000"]

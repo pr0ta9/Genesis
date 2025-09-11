@@ -281,6 +281,15 @@ docker build -f Dockerfile.gpu-cuda12 -t genesis-backend:gpu .
 
 # Build frontend
 docker build -t genesis-frontend ./frontend
+
+# For running in dev mode
+docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d frontend
+
+# For running in prod mode
+docker-compose up -d
+
+# For shutting down docker
+docker compose down
 ```
 
 ## Contributing

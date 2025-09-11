@@ -44,6 +44,8 @@ services:
       - ./backend/outputs:/app/outputs
       # Mount for SQLite database persistence
       - ./backend/db:/app/db
+      # Persist SQLite DB to Windows AppData (Docker expands ${APPDATA})
+      - ${APPDATA}/Genesis:/root/.genesis
     networks:
       - genesis-network
 # No longer depends on ollama service - using host Ollama

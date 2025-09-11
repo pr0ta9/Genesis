@@ -594,7 +594,7 @@ export function Chat({ logoPath, logoPaths, logoViewBox = "0 0 1024 1024", logoS
                 />
               </div>
             ) : null}
-            <div className="mt-1">
+            <div className="mt-5">
               <ChatInput 
                 value={input}
                 onChange={setInput}
