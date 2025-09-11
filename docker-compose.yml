@@ -1,0 +1,124 @@
+services:
+  # Ollama service (HEAVILY required by your code)
+# Ollama service commented out - using host system Ollama instead
+  # ollama:
+  #   image: ollama/ollama:latest
+  #   container_name: genesis-ollama
+  #   ports:
+  #     - "11434:11434"
+  #   volumes:
+  #     - ollama_models:/root/.ollama
+  #   networks:
+  #     - genesis-network
+  #   restart: unless-stopped
+  #   healthcheck:
+  #     test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
+  #     interval: 30s
+  #     timeout: 10s
+  #     retries: 5
+  #     start_period: 20s
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: genesis-backend
+    ports:
+      - "8000:8000"
+    environment:
+      - GENESIS_KEEP_WORKSPACE=1
+      - GENESIS_PROJECT_ROOT=/app
+      - DATABASE_URL=sqlite:///./genesis.db
+      - CORS_ORIGINS=["http://localhost:3000","http://frontend:3000"]
+      - ALLOWED_FILE_ROOTS=/app/.staging_uploads:/tmp
+      # Ollama configuration (using host system Ollama)
+      - OLLAMA_BASE_URL=http://host.docker.internal:11434
+      - OLLAMA_HOST=host.docker.internal:11434
+    env_file:
+      - .env
+    volumes:
+      # Persist data directories (bind-mounted so you can view them on host)
+      - ./backend/data:/app/data
+      - ./backend/tmp:/app/tmp
+      - ./backend/inputs:/app/inputs
+      - ./backend/outputs:/app/outputs
+      # Mount for SQLite database persistence
+      - ./backend/db:/app/db
+    networks:
+      - genesis-network
+# No longer depends on ollama service - using host Ollama
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_BASE: "http://localhost:8000"
+    container_name: genesis-frontend
+    ports:
+      - "3000:3000"
+    environment:
+      - NEXT_PUBLIC_API_BASE=http://localhost:8000
+    depends_on:
+      - backend
+    networks:
+      - genesis-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Optional: CLI service for running Genesis CLI commands
+  cli:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: genesis-cli
+    environment:
+      - GENESIS_KEEP_WORKSPACE=1
+      - GENESIS_PROJECT_ROOT=/app
+    env_file:
+      - .env
+    volumes:
+      # Same volumes as backend for data consistency
+      - genesis_data:/app/data
+      - genesis_tmp:/app/tmp
+      - genesis_inputs:/app/inputs
+      - genesis_outputs:/app/outputs
+      - genesis_db:/app/db
+      # Mount local directories for file uploads/processing
+      - ./inputs:/app/local_inputs:ro
+      - ./outputs:/app/local_outputs
+    networks:
+      - genesis-network
+    command: ["python", "main.py"]
+    stdin_open: true
+    tty: true
+    profiles:
+      - cli  # This service only runs when explicitly requested
+    restart: "no"
+
+volumes:
+  genesis_data:
+    driver: local
+  genesis_tmp:
+    driver: local
+  genesis_inputs:
+    driver: local
+  genesis_outputs:
+    driver: local
+  genesis_db:
+    driver: local
+# ollama_models volume not needed - using host system Ollama
+
+networks:
+  genesis-network:
+    driver: bridge

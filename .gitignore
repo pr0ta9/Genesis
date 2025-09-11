@@ -136,6 +136,13 @@ image_to_image_paths.txt
 /inputs/
 /outputs/
 
+# Backend data directories (keep local)
+backend/inputs/
+backend/outputs/
+backend/data/
+backend/tmp/
+backend/db/
+
 # Audio/Media (keep local)
 *.wav
 *.mp3

@@ -1,0 +1,36 @@
+# Development override for docker-compose.yml
+# Usage: docker-compose -f docker-compose.yml -f docker-compose.dev.yml up
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    volumes:
+      # Mount source code for development
+      - ./src:/app/src
+      - ./backend:/app/backend
+      - ./main.py:/app/main.py
+      # Development data directories
+      - ./data:/app/data
+      - ./tmp:/app/tmp
+    environment:
+      - LOG_LEVEL=DEBUG
+    command: ["python", "-m", "uvicorn", "backend.app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      target: base  # Stop at base for development
+    volumes:
+      # Mount source code for development
+      - ./frontend/src:/app/src
+      - ./frontend/public:/app/public
+      - ./frontend/package.json:/app/package.json
+      - ./frontend/next.config.ts:/app/next.config.ts
+      - ./frontend/tsconfig.json:/app/tsconfig.json
+      - ./frontend/tailwind.config.js:/app/tailwind.config.js
+      - ./frontend/postcss.config.mjs:/app/postcss.config.mjs
+    environment:
+      - NODE_ENV=development
+    command: ["npm", "run", "dev"]
