@@ -239,6 +239,21 @@ chmod +x setup-models.sh && ./setup-models.sh
 - Verify CUDA compatibility with your GPU
 - Check Docker GPU access: `docker run --rm --gpus all nvidia/cuda:12.0-runtime-ubuntu22.04 nvidia-smi`
 
+**If process didn't run correctly**
+
+- Check backend logs for details
+- For image OCR/translation tasks, also review stderr/stdout logs inside `backend/outputs/...`
+- Example log locations:
+  - `backend/outputs/conv_20250910_211003_6e797bb2/11/01_image_ocr_stderr.log`
+  - `backend/outputs/conv_20250910_211003_6e797bb2/11/01_image_ocr_stdout.log`
+
+**Image translation first run (PaddleOCR models)**
+
+- The first run may take time while PaddleOCR models are downloaded and cached locally
+- If the backend shows a 403 error during model download, your machine may be unable to reach the Paddle model host
+- See the [PaddleOCR repository](https://github.com/PaddlePaddle/PaddleOCR) for details and guidance
+- After models download successfully once, they are stored locally and future runs should not encounter this issue
+
 ## System Requirements
 
 ### Minimum (CPU Mode - Recommended)
