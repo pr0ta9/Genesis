@@ -13,6 +13,12 @@ A sophisticated multimodal AI assistant with LangGraph orchestration, supporting
 
 ## Prerequisites
 
+### 🎥 Setup Video Tutorial
+
+[**🎬 Watch the Genesis Setup Guide →**](https://youtu.be/_Z7FD8-qf2M)
+
+*Complete walkthrough for setting up Genesis AI Assistant*
+
 ### Required
 
 - **[Ollama](https://ollama.com/download)** - Local AI model runtime (required for AI functionality)
