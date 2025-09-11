@@ -1,5 +1,5 @@
 # Multi-stage build for Genesis Python Backend/CLI
-FROM python:3.12-slim as base
+FROM python:3.11-slim as base
 
 # Set environment variables
 ENV PYTHONUNBUFFERED=1 \
@@ -50,7 +50,7 @@ COPY backend/requirements-docker.txt ./backend_requirements.txt
 RUN pip install ollama
 
 # Install PaddlePaddle CPU (universal compatibility)
-RUN python -m pip install paddlepaddle==3.1.1 -i https://www.paddlepaddle.org.cn/packages/stable/cpu/
+RUN python -m pip install paddlepaddle==3.2.0 -i https://www.paddlepaddle.org.cn/packages/stable/cpu/
 
 # Install Python dependencies
 # Install main requirements first (has more dependencies)

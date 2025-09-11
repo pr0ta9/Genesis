@@ -120,14 +120,12 @@ Thumbs.db
 # test cache files
 tmp/
 *.jpg
-*.png
 *.jpeg
 *.gif
 *.bmp
 *.tiff
 *.ico
 *.webp
-*.svg
 *.pdf
 image_to_image_paths.txt
 
@@ -144,13 +142,6 @@ backend/tmp/
 backend/db/
 
 # Audio/Media (keep local)
-*.wav
-*.mp3
-*.flac
-*.ogg
-*.m4a
-*.aac
-*.webm
 *.md
 **/*.md
 !/README.md
