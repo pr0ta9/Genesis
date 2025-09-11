@@ -295,7 +295,8 @@ export function Preview() {
           <div className="w-full h-full flex items-center justify-center bg-gray-50">
             <div className="text-center">
               <div className="text-6xl mb-4">🎵</div>
-              <audio controls className="mb-2" src={previewData.content} preload="metadata">
+              <audio controls className="mb-2">
+                <source src={previewData.content} type="audio/mpeg" />
                 Your browser does not support the audio element.
               </audio>
               <div className="text-sm text-gray-600">{previewData.filename}</div>

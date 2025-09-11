@@ -155,3 +155,7 @@ backend/db/
 **/*.md
 !/README.md
 !/todo.md
+
+# Allow tracking of assets in frontend/public (override global ignores)
+!frontend/public/
+!frontend/public/**

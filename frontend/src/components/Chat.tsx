@@ -8,7 +8,18 @@ import { buildUrl, ENDPOINTS } from "@/lib/api/config";
 import { listModels, getCurrentModel } from "@/lib/api/models";
 import { useRouter, usePathname } from "next/navigation";
 
-export function Chat() {
+type ChatProps = {
+  // Optional URL/path to an SVG file to inline (no <img src>)
+  logoPath?: string;
+  // Optional pre-parsed SVG path data to render directly
+  logoPaths?: string[];
+  // Optional viewBox for the inline paths
+  logoViewBox?: string;
+  // Pixel height for the logo in the empty state
+  logoSize?: number;
+};
+
+export function Chat({ logoPath, logoPaths, logoViewBox = "0 0 1024 1024", logoSize = 96 }: ChatProps) {
   const { currentConversationId, dispatch, connectSocket, wsConnected, messages, showViz } = useApp();
   const router = useRouter();
   const pathname = usePathname();
@@ -18,6 +29,7 @@ export function Chat() {
   const socketRef = useRef<ReturnType<typeof connectSocket> | null>(null);
   const lastConnectedIdRef = useRef<string | null>(null);
   const connectTimerRef = useRef<number | null>(null);
+  const [inlineSvg, setInlineSvg] = useState<string | null>(null);
 
   useEffect(() => {
     (async () => {
@@ -49,6 +61,28 @@ export function Chat() {
       }
     })();
   }, []);
+
+  // Fetch and inline external SVG file if a path is provided and no explicit paths were given
+  useEffect(() => {
+    let aborted = false;
+    async function loadSvg() {
+      if (!logoPath || (logoPaths && logoPaths.length > 0)) return;
+      try {
+        const res = await fetch(logoPath);
+        if (!res.ok) return;
+        const text = await res.text();
+        if (aborted) return;
+        // Ensure the SVG scales by height; strip width/height to let CSS control size
+        const cleaned = text
+          .replace(/<\?xml[^>]*>/gi, "")
+          .replace(/<!DOCTYPE[^>]*>/gi, "")
+          .replace(/\s(width|height)="[^"]*"/gi, "");
+        setInlineSvg(cleaned);
+      } catch {}
+    }
+    void loadSvg();
+    return () => { aborted = true; };
+  }, [logoPath, logoPaths]);
 
   useEffect(() => {
     if (!currentConversationId) {
@@ -536,12 +570,38 @@ export function Chat() {
         /* Empty State - Centered Chat Input */
         <div className="h-full flex items-center justify-center p-6">
           <div className={`w-full ${showViz ? "max-w-2xl" : "max-w-3xl"}`}>
-            <ChatInput 
-              value={input}
-              onChange={setInput}
-              onSend={onSend}
-              isLoading={isLoading}
-            />
+            {(logoPaths && logoPaths.length > 0) ? (
+              <div className="w-full flex items-center justify-center mb-1">
+                <svg
+                  viewBox={logoViewBox}
+                  className="opacity-90"
+                  style={{ height: logoSize, width: "auto" }}
+                  xmlns="http://www.w3.org/2000/svg"
+                  aria-hidden="true"
+                >
+                  {logoPaths.map((d, i) => (
+                    <path key={i} d={d} fill="currentColor" />
+                  ))}
+                </svg>
+              </div>
+            ) : inlineSvg ? (
+              <div className="w-full flex items-center justify-center mb-1">
+                <div
+                  style={{ height: logoSize, width: "auto" }}
+                  className="opacity-90 [&>svg]:h-full [&>svg]:w-auto"
+                  // Inline the SVG markup (no <img src>)
+                  dangerouslySetInnerHTML={{ __html: inlineSvg }}
+                />
+              </div>
+            ) : null}
+            <div className="mt-1">
+              <ChatInput 
+                value={input}
+                onChange={setInput}
+                onSend={onSend}
+                isLoading={isLoading}
+              />
+            </div>
           </div>
         </div>
       )}
