@@ -349,5 +349,3 @@ The OpenAI gpt-oss models are licensed under the Apache 2.0 license.
 - [LangChain](https://langchain.com) for AI orchestration framework
 - [FastAPI](https://fastapi.tiangolo.com) for the backend framework
 - [Next.js](https://nextjs.org) for the frontend framework
-
-test
