@@ -165,13 +165,25 @@ class Router(BaseAgent[RoutingResponse]):
         # Coerce/normalize unstructured JSON string/dict into RoutingResponse
         if isinstance(routing, str):
             try:
+                # Try direct JSON parsing first
                 routing = RoutingResponse.model_validate(json.loads(routing))
             except Exception:
                 try:
-                    data = json.loads(routing or "{}")
-                except Exception:
-                    data = {}
-                routing = data
+                    # Try to extract JSON from mixed text content
+                    import re
+                    json_pattern = r'\{.*\}'
+                    json_match = re.search(json_pattern, routing, re.DOTALL)
+                    if json_match:
+                        json_str = json_match.group(0)
+                        print(f"[ROUTER DEBUG] Extracted JSON from mixed content: {json_str[:100]}...")
+                        data = json.loads(json_str)
+                        routing = RoutingResponse.model_validate(data)
+                    else:
+                        print("[ROUTER DEBUG] No JSON found in LLM response")
+                        routing = None
+                except Exception as e:
+                    print(f"[ROUTER DEBUG] JSON extraction failed: {e}")
+                    routing = None
         elif isinstance(routing, dict):
             pass
 
@@ -258,16 +270,17 @@ class Router(BaseAgent[RoutingResponse]):
         
         # Build lookup for tool metadata by name
         tools_by_name = {tool["name"]: tool for tool in tool_metadata}
-        print(f"tools_by_name: {tools_by_name}")
-        # Check for null values in simple path param_values first, ignoring keys with defaults
+        
+        # Check for empty values that don't match expected defaults
         for i, simple_step in enumerate(routing.path):
             tool_meta = tools_by_name.get(simple_step.name)
-            default_keys = set((tool_meta.get("default_params") or {}).keys()) if tool_meta else set()
-            has_non_default_none = any(
-                (value is None) and (key not in default_keys)
-                for key, value in simple_step.param_values.items()
-            )
-            if has_non_default_none:
+            if not tool_meta:
+                self.is_partial = True
+                self.full_path = self._convert_to_full_path(routing.path, tool_metadata, up_to_index=i)
+                return "find_path"
+                
+            has_invalid_empty = self._has_invalid_empty_values(simple_step.param_values, tool_meta)
+            if has_invalid_empty:
                 self.is_partial = True
                 
                 # Convert path up to this point to get param_types for previous step
@@ -290,12 +303,51 @@ class Router(BaseAgent[RoutingResponse]):
                                 if enum_value is not None:
                                     type_savepoint.append(enum_value)
                                 break
-                else:
-                    # If this is the first step and has None values, 
-                    # we need more information from user
-                    return "waiting_for_feedback"
                 
                 return "find_path"
         
         self.full_path = self._convert_to_full_path(routing.path, tool_metadata)
         return "execute"
+    
+    def _is_empty_value(self, value) -> bool:
+        """Check if a value is considered empty (None, empty string, empty list, etc.)"""
+        if value is None:
+            return True
+        if isinstance(value, str) and value.strip() == "":
+            return True
+        if isinstance(value, (list, dict, tuple, set)) and len(value) == 0:
+            return True
+        return False
+    
+    def _has_invalid_empty_values(self, param_values: Dict[str, Any], tool_meta: Optional[Dict[str, Any]]) -> bool:
+        """
+        Check if param_values contains empty values that don't match expected defaults.
+        
+        Args:
+            param_values: The parameter values from the routing response
+            tool_meta: Tool metadata containing default_params
+            
+        Returns:
+            True if there are invalid empty values that need user input
+        """
+        if not param_values or not tool_meta:
+            return False
+            
+        default_params = tool_meta.get("default_params", {})
+        
+        for key, value in param_values.items():
+            if self._is_empty_value(value):
+                # Check if this parameter has a default defined
+                if key in default_params:
+                    expected_default = default_params[key].get("value") if isinstance(default_params[key], dict) else default_params[key]
+                    # If the empty value matches the expected default, it's valid
+                    if value == expected_default:
+                        continue
+                    # Special case: if expected default is None and we have None, it's valid
+                    if expected_default is None and value is None:
+                        continue
+                
+                # Empty value without matching default - this needs user input
+                return True
+                
+        return False

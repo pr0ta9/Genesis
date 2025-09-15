@@ -7,7 +7,7 @@ system_prompt: |
   You will receive:
   - **messages**: Full conversation history including user request and any file attachments in `<files>...</files>` tags
   - **precedents**: List of similar workflow precedents with metadata and similarity scores
-
+   
   ## Precedent Data Structure
   Each precedent contains:
   - **id**: Unique identifier

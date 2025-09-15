@@ -96,11 +96,21 @@ class Orchestrator:
             else:
                 print("⚠️  [ORCHESTRATOR] No user query found - skipping precedent search")
             
-            # Let precedent agent analyze the results
-            print("🤖 [ORCHESTRATOR] Calling precedent agent to analyze results...")
-            result = self.precedent.analyze_precedents(state, precedents)
-            print(f"🎯 [ORCHESTRATOR] Precedent agent decision: next_node='{result.get('next_node', 'unknown')}'")
-            
+            # Only analyze precedents if we found any
+            if precedents:
+                print("🤖 [ORCHESTRATOR] Calling precedent agent to analyze results...")
+                result = self.precedent.analyze_precedents(state, precedents)
+                print(f"🎯 [ORCHESTRATOR] Precedent agent decision: next_node='{result.get('next_node', 'unknown')}'")
+            else:
+                print("⚠️ [ORCHESTRATOR] No precedents found - skipping analysis and routing to classify")
+                result = {
+                    "node": "precedent",
+                    "next_node": "classify",
+                    "precedent_reasoning": "No precedents found to analyze",
+                    "precedent_clarification": None,
+                    "messages": state.get("messages", [])
+                }
+
             # Add precedent search data to state
             result["precedents_found"] = precedents
             print(f"💾 [ORCHESTRATOR] Added {len(precedents)} precedents to state")

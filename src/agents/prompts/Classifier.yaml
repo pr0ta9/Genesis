@@ -76,6 +76,7 @@ system_prompt: |
   is_complex: false
   reasoning: "Simple factual question that can be answered directly without any processing or tools"
   clarification_question: null
+  
 
 metadata:
   temperature: 0.1

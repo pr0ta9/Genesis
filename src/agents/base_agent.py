@@ -119,10 +119,10 @@ class BaseAgent(ABC, Generic[ResponseType]):
         Returns:
             Tuple of (structured_response, updated_message_history)
         """
-        system_prompt_text = self._render_system_prompt(kwargs)
 
         # Format all messages as conversation text
-        conversation_text = "\n\n## Conversation:\n"
+        # Format conversation history
+        conversation_text = "\n\n## Conversation(user request):\n"
         for msg in messages:
             if isinstance(msg, HumanMessage) and msg.content:
                 conversation_text += f"User: {msg.content}\n"
@@ -131,11 +131,11 @@ class BaseAgent(ABC, Generic[ResponseType]):
             elif isinstance(msg, SystemMessage) and msg.content:
                 conversation_text += f"System: {msg.content}\n"
 
-        # Create enhanced system prompt with embedded conversation
-        enhanced_system_content = system_prompt_text + conversation_text
+        # Render system prompt with conversation included
+        enhanced_system_content = self._render_system_prompt(kwargs)
 
-        # Create processing messages with just the enhanced system message
-        processing_messages = [SystemMessage(content=enhanced_system_content)]
+        # Create processing messages with enhanced system message
+        processing_messages = [SystemMessage(content=enhanced_system_content), HumanMessage(content=conversation_text)]
 
         # Add JSON schema instruction if needed
         if not self._use_structured_output:
