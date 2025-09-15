@@ -134,14 +134,34 @@ class Router(BaseAgent[RoutingResponse]):
         except Exception:
             pass
 
+        # Extract classification data from state (from classify or precedent node)
+        classification = {
+            "objective": state.get("objective", ""),
+            "input_type": state.get("input_type", "").value, 
+            "output_type": state.get("type_savepoint", [])[-1].value if state.get("type_savepoint") else "",
+            "is_complex": state.get("is_complex", False),
+            "reasoning": state.get("classify_reasoning") or state.get("precedent_reasoning", "")
+        }
+        
+        # Get precedents from state (searched by orchestrator)
+        precedents_found = state.get("precedents_found", [])
+        print(f"📋 [ROUTER] Formatting {len(precedents_found)} precedents as examples...")
+        precedent_examples = self._format_precedent_examples(precedents_found)
+        if precedent_examples:
+            print(f"✅ [ROUTER] Generated precedent examples: {len(precedent_examples)} chars")
+        else:
+            print("ℹ️  [ROUTER] No precedent examples available")
+        
         routing, updated_history = self._invoke(
             messages,
             node,
             available_paths=all_paths,
             tool_descriptions=tool_metadata,
             available_files=available_files,
+            classification=classification,
+            precedent_examples=precedent_examples,
         )
-
+        print(f"routing result: {routing}")
         # Coerce/normalize unstructured JSON string/dict into RoutingResponse
         if isinstance(routing, str):
             try:
@@ -198,6 +218,35 @@ class Router(BaseAgent[RoutingResponse]):
             "messages": updated_history,
             "type_savepoint": type_savepoint,
         }
+    
+    def _format_precedent_examples(self, precedents: List[Dict]) -> str:
+        """Format precedents into example strings for the prompt."""
+        print(f"🔄 [ROUTER] Formatting {len(precedents)} precedents into examples...")
+        
+        if not precedents:
+            print("ℹ️  [ROUTER] No precedents provided for examples")
+            return ""
+        
+        example_parts = []
+        try:
+            import json
+            for i, precedent in enumerate(precedents):
+                router_response = precedent.get("router_format", {})
+                if router_response and isinstance(router_response, dict):
+                    # Format as JSON example
+                    example_json = json.dumps(router_response, indent=2)
+                    objective = precedent.get("objective", "Previous task")
+                    example_parts.append(f"### Example {i+1}: {objective}\n```json\n{example_json}\n```")
+                    print(f"📝 [ROUTER] Added example {i+1}: '{objective[:60]}...' ({len(example_json)} chars)")
+                else:
+                    print(f"⚠️  [ROUTER] Skipped precedent {i+1}: no router_format data")
+            
+            result = "\n\n".join(example_parts) if example_parts else ""
+            print(f"✅ [ROUTER] Generated {len(example_parts)} examples ({len(result)} total chars)")
+            return result
+        except Exception as e:
+            print(f"❌ [ROUTER] Error formatting precedent examples: {e}")
+            return ""
     
     def _get_next_step(self, routing: RoutingResponse, tool_metadata: List[Dict[str, Any]], type_savepoint: List[str]) -> str:
         """Determine next step and convert path to full PathItems only if needed."""

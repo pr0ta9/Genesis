@@ -181,7 +181,7 @@ def test_orchestrator_with_message_history():
             ),
         ]
         # Create multimodal message with image
-        image_path = r"C:\Users\Richard\Documents\GitHub\Genesis\test.png"
+        image_path = r"C:\Users\Jacob\Documents\GitHub\Genesis\test.png"
         user_text = "yes, here is the image"
         
         content_blocks = create_image_content_block(image_path, user_text)

@@ -97,7 +97,6 @@ class Classifier(BaseAgent[ClassificationResponse]):
             "next_node": next_node,
             "objective": classification.objective,
             "input_type": classification.input_type,  # Now a string
-            "output_type": classification.output_type,  # Now a string  
             "type_savepoint": [classification.output_type],  # Now a list of strings
             "is_complex": classification.is_complex,
             "classify_reasoning": classification.reasoning,

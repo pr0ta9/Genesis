@@ -185,3 +185,43 @@ class State(Base):
             })
         
         return base_dict
+
+
+class Precedent(Base):
+    """Precedent model - stores workflow precedents for semantic search."""
+    __tablename__ = "precedent"
+    
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    description = Column(Text, nullable=False, comment='Task description + overall workflow description + conversation log (used for semantic search)')
+    path = Column(JSON, nullable=False, comment='List of PathToolMetadata in JSON format representing the workflow')
+    router_format = Column(JSON, nullable=False, comment='Router response in JSON format of the workflow')
+    messages = Column(Text, nullable=False, comment='Conversation paragraph of the workflow in string format')
+    objective = Column(Text, nullable=False, comment='State variable')
+    is_complex = Column(Boolean, nullable=False, comment='State variable indicating complexity')
+    input_type = Column(String(100), nullable=False, comment='State variable for input type')
+    type_savepoint = Column(JSON, nullable=False, comment='State variable as list of strings stored in JSON format')
+    embedding = Column(Text, nullable=False, comment='Vector embedding of the description for semantic search (VECTOR(768) in TiDB)')
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    
+    def to_dict(self, include_embedding: bool = False):
+        """Convert to dictionary for API responses."""
+        result = {
+            "id": self.id,
+            "description": self.description,
+            "path": self.path,
+            "router_format": self.router_format,
+            "messages": self.messages,
+            "objective": self.objective,
+            "is_complex": self.is_complex,
+            "input_type": self.input_type,
+            "type_savepoint": self.type_savepoint,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+        }
+        
+        # Only include embedding if specifically requested (it's large)
+        if include_embedding:
+            result["embedding"] = self.embedding
+            
+        return result

@@ -2,7 +2,7 @@
 Initialize database tables.
 """
 from .database import engine, Base
-from .models import Conversation, Message, State
+from .models import Conversation, Message, State, Precedent
 
 
 def init_db():

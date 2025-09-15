@@ -1,0 +1,8 @@
+########################################
+# Genesis GPU-Specific Requirements
+########################################
+
+# PyTorch + CUDA are provided by the base image (pytorch/pytorch).
+# Add GPU-only Python deps here if needed.
+
+

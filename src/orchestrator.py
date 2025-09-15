@@ -1,4 +1,5 @@
 import logging
+import os
 from typing import Any, Dict, List, Optional, Generator
 from pathlib import Path
 
@@ -8,7 +9,7 @@ from langgraph.types import interrupt, Command
 from dotenv import load_dotenv
 
 from .state import State
-from .agents import Classifier, Router, Finalizer, setup_llm
+from .agents import Precedent, Classifier, Router, Finalizer, setup_llm
 from .path import ToolRegistry, PathGenerator, PathToolMetadata, PathItem
 from .executor.flow_state import StateGenerator
 from .executor.conversion import convert_path_to_hybrid_graph
@@ -25,6 +26,7 @@ class Orchestrator:
         self.llm = setup_llm("ollama", "gpt-oss:20b")
         self.llm.bind_tools([search])
         # Initialize agents
+        self.precedent = Precedent(self.llm)
         self.classifier = Classifier(self.llm)
         self.router = Router(self.llm)
         self.finalizer = Finalizer(self.llm)
@@ -61,7 +63,57 @@ class Orchestrator:
         # -----------------
         # Node definitions
         # -----------------
-
+        def precedent_node(state: State) -> list[dict]:
+            self.logger.info("🔍 [ORCHESTRATOR] Entering precedent_node state")
+            
+            # Extract user query from messages
+            print("📝 [ORCHESTRATOR] Extracting user query from messages...")
+            user_query = ""
+            messages = state.get("messages", [])
+            for msg in messages:
+                if hasattr(msg, 'content') and hasattr(msg, '__class__'):
+                    if msg.__class__.__name__ == 'HumanMessage':
+                        if user_query:
+                            user_query += " " + msg.content
+                        else:
+                            user_query = msg.content
+            print(f"📝 [ORCHESTRATOR] Extracted query: '{user_query[:150]}...'") if user_query else print("⚠️  [ORCHESTRATOR] No user query found in messages")
+            
+            # Search for precedents (single search for both precedent and router use)
+            precedents = []
+            if user_query:
+                print("🔍 [ORCHESTRATOR] Starting precedent search...")
+                try:
+                    # Import here to avoid circular imports
+                    from backend.app.db.precedent import search_similar_precedents
+                    precedents = search_similar_precedents(user_query, threshold=0.7, limit=3)
+                    print(f"✅ [ORCHESTRATOR] Found {len(precedents)} precedents for query")
+                    self.logger.info("Found %d precedents for query: %s", len(precedents), user_query[:100])
+                except Exception as e:
+                    print(f"❌ [ORCHESTRATOR] Failed to search precedents: {e}")
+                    self.logger.warning("Failed to search precedents: %s", e)
+                    precedents = []
+            else:
+                print("⚠️  [ORCHESTRATOR] No user query found - skipping precedent search")
+            
+            # Let precedent agent analyze the results
+            print("🤖 [ORCHESTRATOR] Calling precedent agent to analyze results...")
+            result = self.precedent.analyze_precedents(state, precedents)
+            print(f"🎯 [ORCHESTRATOR] Precedent agent decision: next_node='{result.get('next_node', 'unknown')}'")
+            
+            # Add precedent search data to state
+            result["precedents_found"] = precedents
+            print(f"💾 [ORCHESTRATOR] Added {len(precedents)} precedents to state")
+            
+            # Emit state update
+            emit_status(
+                type=StatusType.STATE_UPDATE,
+                node="precedent",
+                state_update=result
+            )
+            
+            return result
+        
         def classify_node(state: State) -> list[dict]:
             self.logger.info("Entering state: classify")
             self.logger.debug("State messages before classify:\n%s", format_messages(state.get("messages", [])))
@@ -239,6 +291,9 @@ class Orchestrator:
             if state.get("node") == "classify":
                 question = state.get("classify_clarification")
                 return_node = "classify"
+            elif state.get("node") == "precedent":
+                question = state.get("precedent_clarification")
+                return_node = "precedent"
             else:
                 question = state.get("route_clarification") 
                 return_node = "route"
@@ -257,6 +312,7 @@ class Orchestrator:
             }
 
         # Add nodes
+        builder.add_node("precedent", precedent_node)
         builder.add_node("classify", classify_node)
         builder.add_node("find_path", find_path_node)
         builder.add_node("route", route_node)
@@ -265,7 +321,12 @@ class Orchestrator:
         builder.add_node("waiting_for_feedback", feedback_node)
 
         # Linear flow: START -> classify -> find_path -> route -> execute -> finalize -> END
-        builder.add_edge(START, "classify")
+        builder.add_edge(START, "precedent")
+        builder.add_conditional_edges(
+            "precedent",
+            lambda state: state.get("next_node"),
+        )
+        builder.add_edge("classify", "find_path")
         builder.add_conditional_edges(
             "classify",
             lambda state: state.get("next_node"),

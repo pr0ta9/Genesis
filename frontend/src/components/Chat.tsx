@@ -115,7 +115,8 @@ export function Chat({ logoPath, logoPaths, logoViewBox = "0 0 1024 1024", logoS
           // Build attachments from reasoning.additional_kwargs.file_paths or legacy content hint
           let attachments: any[] | undefined = (m as any).attachments;
           const text: string = m.content || '';
-          const filesStart = text.indexOf("[FILES ATTACHED]\n");
+          const filesStart = text.indexOf("<files>");
+          const filesEnd = text.indexOf("</files>");
           const filePathsFromReasoning = (m as any)?.reasoning?.additional_kwargs?.file_paths as string[] | undefined;
           if (!attachments && Array.isArray(filePathsFromReasoning) && filePathsFromReasoning.length > 0) {
             const list = filePathsFromReasoning;
@@ -130,8 +131,8 @@ export function Chat({ logoPath, logoPaths, logoViewBox = "0 0 1024 1024", logoS
               const url = `${buildUrl(ENDPOINTS.uploads)}/${encodeURIComponent(detail.conversation.id)}/${encodeURIComponent(name)}`;
               return { url, name, mime };
             });
-          } else if (!attachments && filesStart !== -1) {
-            const list = text.slice(filesStart + "[FILES ATTACHED]\n".length).trim().split(/\r?\n/).filter(Boolean);
+          } else if (!attachments && filesStart !== -1 && filesEnd !== -1) {
+            const list = text.slice(filesStart + "<files>".length, filesEnd).trim().split(/\r?\n/).filter(Boolean);
             attachments = list.map((p: string) => {
               const name = p.split(/[/\\]/).pop() || 'file';
               const ext = name.split('.').pop()?.toLowerCase() || '';

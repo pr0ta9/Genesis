@@ -12,6 +12,7 @@ from .states import router as states_router
 from .uploads import router as uploads_router
 from .outputs import router as outputs_router
 from .tools import router as tools_router
+from .precedents import router as precedents_router
 
 # Create main v1 router
 api_router = APIRouter()
@@ -26,3 +27,4 @@ api_router.include_router(ws_router, tags=["websocket"])
 api_router.include_router(uploads_router, prefix="/uploads", tags=["uploads"])
 api_router.include_router(outputs_router, prefix="/outputs", tags=["outputs"])
 api_router.include_router(tools_router, prefix="/tools", tags=["tools"])
+api_router.include_router(precedents_router, prefix="/conversations", tags=["precedents"])

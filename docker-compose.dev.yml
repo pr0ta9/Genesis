@@ -4,7 +4,8 @@ services:
   backend:
     build:
       context: .
-      dockerfile: Dockerfile
+      # dockerfile: Dockerfile # CPU version
+      dockerfile: Dockerfile.gpu-cuda12 # GPU version
     volumes:
       # Mount source code for development
       - ./src:/app/src
@@ -16,6 +17,8 @@ services:
     environment:
       - LOG_LEVEL=DEBUG
     command: ["python", "-m", "uvicorn", "backend.app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+    # Request GPU for Compose (non-Swarm)
+    gpus: all
 
   frontend:
     build:
@@ -33,6 +36,10 @@ services:
     environment:
       - NODE_ENV=development
       - NEXT_PUBLIC_API_BASE=http://localhost:8000
+      # Enable polling so file changes from Windows bind mounts are detected
+      - WATCHPACK_POLLING=true
+      - WATCHPACK_POLLING_INTERVAL=300
+      - CHOKIDAR_USEPOLLING=true
     ports:
       - "3000:3000"
     command: ["npm", "run", "dev", "--", "-H", "0.0.0.0", "-p", "3000"]

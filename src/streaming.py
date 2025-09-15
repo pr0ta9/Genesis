@@ -17,6 +17,9 @@ class StreamEventType(Enum):
     PROGRESS = "progress"
     TOKEN = "token"
     DEBUG = "debug"
+# REMOVED: Precedent event types (now handled via API)
+    # STORE_TO_PRECEDENT = "store_to_precedent"  
+    # SEARCH_PRECEDENT = "search_precedent"
 
 
 class StatusType(Enum):

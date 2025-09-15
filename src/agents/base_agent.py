@@ -119,22 +119,44 @@ class BaseAgent(ABC, Generic[ResponseType]):
         Returns:
             Tuple of (structured_response, updated_message_history)
         """
-        # Prepare system message
         system_prompt_text = self._render_system_prompt(kwargs)
-        processing_messages = [SystemMessage(content=system_prompt_text)]
 
-        # Add JSON schema instruction for unstructured output
+        # Format all messages as conversation text
+        conversation_text = "\n\n## Conversation:\n"
+        for msg in messages:
+            if isinstance(msg, HumanMessage) and msg.content:
+                conversation_text += f"User: {msg.content}\n"
+            elif isinstance(msg, AIMessage) and msg.content:
+                conversation_text += f"Assistant: {msg.content}\n"
+            elif isinstance(msg, SystemMessage) and msg.content:
+                conversation_text += f"System: {msg.content}\n"
+
+        # Create enhanced system prompt with embedded conversation
+        enhanced_system_content = system_prompt_text + conversation_text
+
+        # Create processing messages with just the enhanced system message
+        processing_messages = [SystemMessage(content=enhanced_system_content)]
+
+        # Add JSON schema instruction if needed
         if not self._use_structured_output:
             processing_messages.append(self._create_json_instruction_message())
 
-        # Add conversation history
-        processing_messages += messages
+            # # Prepare system message
+            # system_prompt_text = self._render_system_prompt(kwargs)
+            # processing_messages = [SystemMessage(content=system_prompt_text)]
 
-        # Log invocation
-        self.logger.info("Entering state: %s", node)
-        self.logger.debug("Messages before invoke:\n%s", format_messages(messages))
-        
-        # Prepare invocation parameters
+            # # Add JSON schema instruction for unstructured output
+            # if not self._use_structured_output:
+            #     processing_messages.append(self._create_json_instruction_message())
+
+            # # Add conversation history
+            # processing_messages += messages
+
+            # # Log invocation
+            # self.logger.info("Entering state: %s", node)
+            # self.logger.debug("Messages before invoke:\n%s", format_messages(messages))
+            
+            # Prepare invocation parameters
         metadata = self.prompt_config.get("metadata", {})
         invoke_options = {
             "temperature": metadata.get("temperature", 0.1),
@@ -142,17 +164,20 @@ class BaseAgent(ABC, Generic[ResponseType]):
         }
         
         # Enable reasoning if configured in metadata
-        invoke_kwargs = metadata.get("invoke_kwargs", {})
+        invoke_kwargs = self.prompt_config.get("invoke_kwargs", {})
 
         # Check if we should emit reasoning content
         from ..streaming import emit_status, StatusType
         # Invoke LLM
         self.logger.info("Starting invoke for: %s", node)
+        print(f"invoke_kwargs: {invoke_kwargs}")
+        print(f"prompt:\n{processing_messages}")
         result = self.llm.invoke(
             processing_messages,
             options=invoke_options,
             **invoke_kwargs,
         )
+        print(f"result: {result}")
         self.logger.info("Completed invoke for: %s", node)
         # Emit reasoning if available - wrapped in try/catch
         try:

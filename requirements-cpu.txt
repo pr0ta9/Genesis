@@ -1,0 +1,13 @@
+########################################
+# Genesis CPU-Specific Requirements
+########################################
+
+# PyTorch CPU triplet
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch==2.8.0+cpu
+torchvision==0.23.0+cpu
+torchaudio==2.8.0+cpu
+
+# OpenCV contrib (CPU image used contrib previously)
+opencv-contrib-python==4.10.0.84
+

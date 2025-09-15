@@ -6,6 +6,7 @@ Modular architecture for agents
 from .classifier import Classifier
 from .router import Router
 from .finalizer import Finalizer
+from .precedent import Precedent
 from .llm import setup_llm
 
 __all__ = [
@@ -13,6 +14,7 @@ __all__ = [
     'Classifier',
     'Router',
     'Finalizer',
+    'Precedent',
     'setup_llm',
 ]
 

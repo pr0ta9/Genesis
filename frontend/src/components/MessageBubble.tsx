@@ -18,6 +18,10 @@ export function MessageBubble({ message }: MessageBubbleProps) {
   const userRef = useRef<HTMLDivElement | null>(null);
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
   const { currentConversationId } = (useApp() as any) || {};
+  
+  // Precedent saving state
+  const [precedentSaved, setPrecedentSaved] = useState(false);
+  const [savingPrecedent, setSavingPrecedent] = useState(false);
 
   // Extract <file>...</file> tags from assistant content
   function extractFileTags(text: string | undefined): string[] {
@@ -79,6 +83,78 @@ export function MessageBubble({ message }: MessageBubbleProps) {
       name.endsWith(".flac")
     );
   }
+
+   const handleSavePrecedent = async () => {
+    console.log('🎯 [FRONTEND] Starting precedent save process...');
+    
+    if (!message.conversation_id) {
+      console.error('❌ [FRONTEND] No conversation ID available for precedent saving');
+      console.log('📊 [FRONTEND] Message object keys:', Object.keys(message));
+      return;
+    }
+    
+    console.log('📋 [FRONTEND] Saving precedent for conversation:', message.conversation_id);
+    console.log('📊 [FRONTEND] Message details:', {
+      id: message.id,
+      role: message.role,
+      hasState: !!message.state_id,
+      timestamp: message.timestamp
+    });
+    
+    setSavingPrecedent(true);
+    console.log('⏳ [FRONTEND] Set saving state to true, making API request...');
+    
+    try {
+      const apiUrl = buildUrl(`${ENDPOINTS.conversations}/${encodeURIComponent(message.conversation_id)}/save-precedent`);
+      console.log('🔗 can you see this message? added new debugs');
+      console.log('🔗 [FRONTEND] API URL:', apiUrl);
+      
+      const response = await fetch(apiUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+
+      console.log('📡 [FRONTEND] API response received:', {
+        status: response.status,
+        statusText: response.statusText,
+        ok: response.ok
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        console.log('✅ [FRONTEND] Precedent saved successfully!');
+        console.log('📋 [FRONTEND] Result details:', {
+          precedent_id: result.precedent_id,
+          success: result.success,
+          message: result.message
+        });
+        
+        setPrecedentSaved(true);
+        console.log('🎉 [FRONTEND] Updated UI to show success state');
+        
+        // Show success message briefly
+        setTimeout(() => {
+          setPrecedentSaved(false);
+          console.log('🔄 [FRONTEND] Reset success state after 3 seconds');
+        }, 3000);
+      } else {
+        const error = await response.json();
+        console.error('❌ [FRONTEND] API returned error status:', response.status);
+        console.error('📋 [FRONTEND] Error details:', error);
+        // Could add error toast here
+      }
+    } catch (error) {
+      console.error('❌ [FRONTEND] Network/parsing error:', error);
+      console.error('🔧 [FRONTEND] Error type:', error instanceof Error ? error.name : 'Unknown');
+      console.error('📋 [FRONTEND] Error message:', error instanceof Error ? error.message : String(error));
+      // Could add error toast here
+    }
+    
+    setSavingPrecedent(false);
+    console.log('✅ [FRONTEND] Precedent save process completed');
+  };
 
   function renderContentWithFileLinks(text: string | undefined) {
     if (!text) return null;
@@ -396,15 +472,38 @@ export function MessageBubble({ message }: MessageBubbleProps) {
                     </svg>
                   </button>
 
-                  {/* Thumbs Up */}
-                  <button
-                    className="flex items-center justify-center w-7 h-7 rounded hover:bg-gray-100 transition-colors"
-                    aria-label="Like response"
-                  >
-                    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" className="text-gray-500">
-                      <path d="M8.27861 0.811633C8.81985 0.142255 9.79016 0.0422445 10.4537 0.557662L10.5823 0.669367L10.6065 0.693605L10.6097 0.695713L10.6392 0.72522C11.3549 1.44685 11.6336 2.49474 11.3716 3.47675L11.3705 3.48097L11.361 3.5168L11.36 3.51891L10.8889 5.2261C10.8796 5.26003 10.8706 5.29164 10.8626 5.32094C10.8934 5.32101 10.927 5.322 10.9627 5.322H11.9006C12.4263 5.322 12.783 5.31906 13.0651 5.36731C14.8182 5.66725 15.9851 7.34574 15.6564 9.09363C15.6035 9.37493 15.4769 9.70926 15.2939 10.2023L14.337 12.7799C14.1401 13.3105 13.9773 13.7518 13.8101 14.1025C13.6375 14.4646 13.4385 14.7794 13.1441 15.0425C12.9712 15.197 12.7801 15.3303 12.5751 15.4387C12.2259 15.6232 11.8608 15.7 11.4612 15.7359C11.0742 15.7705 10.6034 15.7696 10.0374 15.7696H4.87371C4.08047 15.7696 3.42922 15.7703 2.90728 15.7138C2.37206 15.6558 1.88985 15.5311 1.4667 15.2237C1.22409 15.0475 1.01072 14.834 0.834405 14.5914C0.52696 14.1683 0.401312 13.6861 0.343323 13.1509C0.286761 12.6288 0.28747 11.977 0.28747 11.1834V9.51411C0.28747 8.84785 0.281286 8.36721 0.399176 7.95656C0.671091 7.00941 1.41109 6.26838 2.35823 5.99645C2.76888 5.87855 3.24952 5.88579 3.91579 5.88579C4.11977 5.88579 4.14542 5.88325 4.16238 5.88053C4.23526 5.8687 4.30403 5.83669 4.35839 5.78674C4.37104 5.77511 4.38755 5.7561 4.51436 5.59494L8.25648 0.839033L8.25754 0.837979L8.27861 0.811633ZM1.69116 11.1834C1.69116 12.0083 1.69211 12.5712 1.73859 13.0002C1.78365 13.4158 1.86467 13.6222 1.96937 13.7663C2.05914 13.8898 2.16727 13.999 2.29079 14.0888C2.43495 14.1935 2.6421 14.2745 3.05797 14.3195C3.45891 14.363 3.97631 14.3656 4.71564 14.3659C4.30795 13.8053 4.06447 13.1172 4.06437 12.371V8.59412H5.46807V12.371C5.46832 13.4734 6.3616 14.367 7.46401 14.367H10.0374C10.6286 14.367 11.0269 14.3663 11.3368 14.3385C11.6339 14.3118 11.7956 14.2639 11.9196 14.1984C12.024 14.1431 12.1213 14.0747 12.2094 13.996C12.3139 13.9025 12.4151 13.7679 12.5434 13.4986C12.6774 13.2177 12.8162 12.8451 13.0219 12.2909L13.9787 9.71328C14.1848 9.15822 14.253 8.96737 14.278 8.83439C14.4617 7.85698 13.8092 6.91901 12.829 6.75098C12.6956 6.72816 12.4928 6.72464 11.9006 6.72464H10.9627C10.7737 6.72464 10.5693 6.72663 10.4 6.70672C10.2211 6.68568 9.96696 6.6303 9.74764 6.43167C9.64448 6.33817 9.5595 6.22616 9.49683 6.10183C9.36384 5.8379 9.37793 5.57905 9.40515 5.40104C9.43094 5.23267 9.48666 5.03623 9.53688 4.8541L10.0079 3.14585L10.0174 3.11108C10.1488 2.61344 10.0077 2.08344 9.64648 1.71687L9.60854 1.67893L9.55058 1.6431C9.48789 1.62049 9.41419 1.6382 9.36932 1.69368L9.35773 1.70633L9.35878 1.70738L5.61666 6.46224C5.51816 6.58741 5.42231 6.71336 5.30683 6.81948C5.05069 7.05477 4.73119 7.20945 4.3879 7.26525C4.23309 7.29038 4.07507 7.28843 3.91579 7.28843C3.1535 7.28843 2.9191 7.29576 2.74604 7.34534C2.26358 7.48385 1.88558 7.86087 1.74702 8.34331C1.69732 8.51642 1.69116 8.75116 1.69116 9.51411V11.1834Z" fill="currentColor"/>
-                    </svg>
-                  </button>
+                  {/* Thumbs Up - Save as Precedent */}
+                  {precedentSaved ? (
+                    <div className="flex items-center text-green-600 text-xs px-2">
+                      <svg className="w-4 h-4 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                      </svg>
+                      Saved!
+                    </div>
+                  ) : (
+                    <button
+                      onClick={handleSavePrecedent}
+                      disabled={savingPrecedent}
+                      className={`flex items-center justify-center w-7 h-7 rounded transition-colors ${
+                        savingPrecedent 
+                          ? 'text-gray-400 cursor-not-allowed'
+                          : 'hover:bg-gray-100 text-gray-500 hover:text-green-600'
+                      }`}
+                      aria-label={savingPrecedent ? "Saving workflow..." : "Save workflow as precedent"}
+                      title={savingPrecedent ? "Saving workflow..." : "Save this workflow as a precedent for future use"}
+                    >
+                      {savingPrecedent ? (
+                        <svg className="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                          <path className="opacity-75" fill="currentColor" d="m4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                      ) : (
+                        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" className="text-current">
+                          <path d="M8.27861 0.811633C8.81985 0.142255 9.79016 0.0422445 10.4537 0.557662L10.5823 0.669367L10.6065 0.693605L10.6097 0.695713L10.6392 0.72522C11.3549 1.44685 11.6336 2.49474 11.3716 3.47675L11.3705 3.48097L11.361 3.5168L11.36 3.51891L10.8889 5.2261C10.8796 5.26003 10.8706 5.29164 10.8626 5.32094C10.8934 5.32101 10.927 5.322 10.9627 5.322H11.9006C12.4263 5.322 12.783 5.31906 13.0651 5.36731C14.8182 5.66725 15.9851 7.34574 15.6564 9.09363C15.6035 9.37493 15.4769 9.70926 15.2939 10.2023L14.337 12.7799C14.1401 13.3105 13.9773 13.7518 13.8101 14.1025C13.6375 14.4646 13.4385 14.7794 13.1441 15.0425C12.9712 15.197 12.7801 15.3303 12.5751 15.4387C12.2259 15.6232 11.8608 15.7 11.4612 15.7359C11.0742 15.7705 10.6034 15.7696 10.0374 15.7696H4.87371C4.08047 15.7696 3.42922 15.7703 2.90728 15.7138C2.37206 15.6558 1.88985 15.5311 1.4667 15.2237C1.22409 15.0475 1.01072 14.834 0.834405 14.5914C0.52696 14.1683 0.401312 13.6861 0.343323 13.1509C0.286761 12.6288 0.28747 11.977 0.28747 11.1834V9.51411C0.28747 8.84785 0.281286 8.36721 0.399176 7.95656C0.671091 7.00941 1.41109 6.26838 2.35823 5.99645C2.76888 5.87855 3.24952 5.88579 3.91579 5.88579C4.11977 5.88579 4.14542 5.88325 4.16238 5.88053C4.23526 5.8687 4.30403 5.83669 4.35839 5.78674C4.37104 5.77511 4.38755 5.7561 4.51436 5.59494L8.25648 0.839033L8.25754 0.837979L8.27861 0.811633ZM1.69116 11.1834C1.69116 12.0083 1.69211 12.5712 1.73859 13.0002C1.78365 13.4158 1.86467 13.6222 1.96937 13.7663C2.05914 13.8898 2.16727 13.999 2.29079 14.0888C2.43495 14.1935 2.6421 14.2745 3.05797 14.3195C3.45891 14.363 3.97631 14.3656 4.71564 14.3659C4.30795 13.8053 4.06447 13.1172 4.06437 12.371V8.59412H5.46807V12.371C5.46832 13.4734 6.3616 14.367 7.46401 14.367H10.0374C10.6286 14.367 11.0269 14.3663 11.3368 14.3385C11.6339 14.3118 11.7956 14.2639 11.9196 14.1984C12.024 14.1431 12.1213 14.0747 12.2094 13.996C12.3139 13.9025 12.4151 13.7679 12.5434 13.4986C12.6774 13.2177 12.8162 12.8451 13.0219 12.2909L13.9787 9.71328C14.1848 9.15822 14.253 8.96737 14.278 8.83439C14.4617 7.85698 13.8092 6.91901 12.829 6.75098C12.6956 6.72816 12.4928 6.72464 11.9006 6.72464H10.9627C10.7737 6.72464 10.5693 6.72663 10.4 6.70672C10.2211 6.68568 9.96696 6.6303 9.74764 6.43167C9.64448 6.33817 9.5595 6.22616 9.49683 6.10183C9.36384 5.8379 9.37793 5.57905 9.40515 5.40104C9.43094 5.23267 9.48666 5.03623 9.53688 4.8541L10.0079 3.14585L10.0174 3.11108C10.1488 2.61344 10.0077 2.08344 9.64648 1.71687L9.60854 1.67893L9.55058 1.6431C9.48789 1.62049 9.41419 1.6382 9.36932 1.69368L9.35773 1.70633L9.35878 1.70738L5.61666 6.46224C5.51816 6.58741 5.42231 6.71336 5.30683 6.81948C5.05069 7.05477 4.73119 7.20945 4.3879 7.26525C4.23309 7.29038 4.07507 7.28843 3.91579 7.28843C3.1535 7.28843 2.9191 7.29576 2.74604 7.34534C2.26358 7.48385 1.88558 7.86087 1.74702 8.34331C1.69732 8.51642 1.69116 8.75116 1.69116 9.51411V11.1834Z" fill="currentColor"/>
+                        </svg>
+                      )}
+                    </button>
+                  )}
 
                   {/* Thumbs Down */}
                   <button

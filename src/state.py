@@ -10,6 +10,11 @@ class State(TypedDict):
     next_node: str
     messages: Annotated[list[AnyMessage], add_messages]
     
+    # Precedent node results
+    precedent_reasoning: str  # Explanation of precedent selection or rejection
+    precedent_clarification: Optional[str]  # Question to ask user if precedent analysis is unclear
+    precedents_found: Optional[List[Dict]]  # Precedents from search (used by both precedent and router)
+    
     # Classify node results
     objective: str
     input_type: WorkflowTypeEnum  # Type of input provided by the user

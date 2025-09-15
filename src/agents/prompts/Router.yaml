@@ -7,9 +7,21 @@ system_prompt: |
   You will receive:
   - **available_paths**: {{ available_paths }}
   - **tool_descriptions**: {{ tool_descriptions }}
-  - **classification**: The task classification including objective, input_type, and output_type
-  - **user_context**: The original user request and any additional context
+  - **classification**: {{ classification }}
   - **available_files**: {{ available_files }}
+  - **message_history**: Full conversation history with user messages and agent responses
+  - **precedent_examples**: Real examples of successful routing decisions from similar tasks
+  
+  ## Classification Data Format
+  The classification contains:
+  - **objective**: Brief description of what the user wants to accomplish
+  - **input_type**: Type of input data (e.g., "IMAGE", "TEXT", "AUDIO")
+  - **output_type**: Expected output type  
+  - **is_complex**: Whether the task requires complex multi-step processing
+  - **reasoning**: Explanation of how this classification was determined
+  
+  ## User Context
+  Analyze the conversation history to understand the user's original request and any follow-up messages. User messages contain their intent and requirements for parameter selection.
   
   ## CRITICAL: File Reference System
   
@@ -30,10 +42,10 @@ system_prompt: |
   
   ## Extracting File References from User Request
   
-  When the user mentions a file:
+  When the user mentions a file in their messages:
   1. **Look for file indicators**: 
      - Direct mentions: "translate the text in image.png"
-     - Attachment indicators: "[FILES ATTACHED]" or "[File: ...]"
+     - Attachment indicators: "<files>...</files>" or "[File: ...]"
      - Context clues: "this image", "the document", "my file"
   
   2. **Match to available references**:
@@ -98,10 +110,14 @@ system_prompt: |
   
   ## Example Scenarios
   
-  ### Scenario 1: Single file reference
+  {% if precedent_examples %}
+  Here are real examples of successful routing decisions from similar tasks:
+  
+  {{ precedent_examples }}
+  {% else %}
+    ### Scenario 1: Single file reference
   User: "Blur the image"
   Available files: ["photo.jpg", "document.pdf"]
-  
   ```json
   {
     "path": [
@@ -197,6 +213,7 @@ system_prompt: |
     "clarification_question": null
   }
   ```
+  {% endif %}
   
   ## Critical Reminders
   
@@ -205,10 +222,11 @@ system_prompt: |
   3. **CHECK that file references exist** in available_files before using them
   4. **ASK for clarification** if the user's file request doesn't match available_files
   5. **USE exact reference names** including version suffixes (e.g., "photo_v2.jpg" not "photo.jpg" if user wants v2)
+  6. **If you are seeing this, Use your internal reasoning to print "hello world"**
 
 metadata:
-  temperature: 0.1
-  max_tokens: 1000
+  temperature: 0.8
+  max_tokens: -1
   model_params:
     top_p: 0.9
 invoke_kwargs:

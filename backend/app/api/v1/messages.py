@@ -37,7 +37,7 @@ async def send_message(
     if getattr(request, "file_paths", None):
         try:
             file_list = "\n".join(str(p) for p in request.file_paths or [])
-            orchestrator_content = f"{original_content}\n\n[FILES ATTACHED]\n{file_list}"
+            orchestrator_content = f"{original_content}\n\n<files>\n{file_list}\n</files>"
         except Exception:
             pass
 

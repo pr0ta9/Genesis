@@ -502,7 +502,7 @@ async def websocket_endpoint(
                         try:
                             refs = _paths_to_references(file_paths)
                             files_text = "\n".join(refs)
-                            orchestrator_content = f"{content}\n\n[FILES ATTACHED]\n{files_text}"
+                            orchestrator_content = f"{content}\n\n<files>\n{files_text}\n</files>"
                         except Exception:
                             pass
 

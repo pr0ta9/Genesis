@@ -30,6 +30,7 @@ RUN apt-get update && apt-get install -y \
     libpng-dev \
     libtiff-dev \
     libopenblas-dev \
+    default-libmysqlclient-dev \
     gfortran \
     wget \
     git \
@@ -40,24 +41,18 @@ RUN apt-get update && apt-get install -y \
 # Create app directory
 WORKDIR /app
 
-# Copy and install Python dependencies
-# Use Docker-optimized requirements (CPU-only for compatibility)
-COPY requirements-docker.txt ./requirements.txt
-COPY backend/requirements-docker.txt ./backend_requirements.txt
-
-# Note: Ollama runs as separate service in docker-compose
-# Install ollama python client for API communication  
-RUN pip install ollama
-
-# Install PaddlePaddle CPU (universal compatibility)
+# Install PaddlePaddle CPU early so this layer is cached regardless of requirements changes
 RUN python -m pip install paddlepaddle==3.2.0 -i https://www.paddlepaddle.org.cn/packages/stable/cpu/
 
-# Install Python dependencies
-# Install main requirements first (has more dependencies)
-RUN pip install --no-cache-dir -r requirements.txt
+# Copy and install Python dependencies
+COPY requirements-common.txt ./requirements-common.txt
+COPY requirements-cpu.txt ./requirements-cpu.txt
 
-# Install backend-specific requirements (may have some overlaps)
-RUN pip install --no-cache-dir -r backend_requirements.txt
+# Install common requirements first (widest reuse)
+RUN pip install --no-cache-dir -r requirements-common.txt
+
+# Install CPU-only requirements (torch cpu triplet etc.)
+RUN pip install --no-cache-dir -r requirements-cpu.txt
 
 # Copy project source code
 COPY . .
