@@ -1,45 +1,205 @@
 """
-Precedent search and storage using TiDB vector search capabilities.
+Precedent search and storage using TiDB with MySQLdb.
 Handles embedding generation and semantic search for workflow precedents.
 """
 import json
 import os
 import re
-from typing import List, Optional, Dict, Any
+import uuid
+from typing import List, Dict, Any
 from datetime import datetime
-from sqlalchemy.orm import Session
+from pathlib import Path
+from contextlib import contextmanager
 
-# Import TiDB vector client and reranker
-from pytidb import TiDBClient
+# MySQLdb imports
+import MySQLdb
+import MySQLdb.cursors
+
+# Keep the reranker and embedding models as they are
 from pytidb.rerankers import Reranker
 from sentence_transformers import SentenceTransformer
+from dotenv import load_dotenv
 
-# Remove this - now initialized in initialize_global_clients()
+load_dotenv(override=True)
 
 # Global instances - initialized once during startup
-_tidb_client = None
 _reranker = None
 _embedding_model = None
+project_root = Path(__file__).parent.parent.parent.parent
+
+def get_mysqlclient_connection(autocommit: bool = True) -> MySQLdb.Connection:
+    """Create a mysqlclient connection to TiDB."""
+    # Get connection parameters from environment variables
+    tidb_host = os.environ.get('TIDB_HOST')
+    tidb_port = os.environ.get('TIDB_PORT', 4000)
+    tidb_user = os.environ.get('TIDB_USERNAME')
+    tidb_password = os.environ.get('TIDB_PASSWORD')
+    tidb_db_name = os.environ.get('TIDB_DATABASE', 'precedent_db')
+    # ca_path = os.environ.get('CA')
+    
+    if not all([tidb_host, tidb_user, tidb_password]):
+        raise ValueError(
+            "Missing required environment variables. Please set:\n"
+            "TIDB_HOST, TIDB_USERNAME, TIDB_PASSWORD, TIDB_DATABASE"
+        )
+    
+    # Build connection configuration for TiDB Cloud
+    db_conf = {
+        "host": tidb_host,
+        "port": int(tidb_port),
+        "user": tidb_user,
+        "password": tidb_password,
+        "database": tidb_db_name,
+        "autocommit": autocommit,
+        "charset": "utf8mb4"
+    }
+    
+    # Add SSL CA path if provided (for windows only)
+    # if ca_path:
+    #     db_conf["ssl_ca"] = ca_path
+    
+    return MySQLdb.connect(**db_conf)
+
+@contextmanager
+def get_db_connection(autocommit: bool = True):
+    """Context manager for database connections."""
+    conn = None
+    try:
+        conn = get_mysqlclient_connection(autocommit=autocommit)
+        yield conn
+    except Exception as e:
+        if conn and not autocommit:
+            conn.rollback()
+        raise e
+    finally:
+        if conn:
+            conn.close()
+
+def validate_table_structure() -> bool:
+    """Check if the precedent table has the correct structure."""
+    try:
+        with get_db_connection() as conn:
+            with conn.cursor(MySQLdb.cursors.DictCursor) as cur:
+                cur.execute("DESCRIBE precedent")
+                columns = cur.fetchall()
+                
+                # Check for required columns and their types
+                column_map = {col['Field']: col for col in columns}
+                
+                # Required structure validation
+                required_checks = [
+                    ('id', lambda col: col['Type'].startswith('int') and col['Extra'] == 'auto_increment'),
+                    ('description', lambda col: col['Type'] == 'text' and col['Null'] == 'NO'),
+                    ('path', lambda col: col['Type'] == 'json' and col['Null'] == 'NO'),
+                    ('router_format', lambda col: col['Type'] == 'json' and col['Null'] == 'NO'),
+                    ('messages', lambda col: col['Type'] == 'text' and col['Null'] == 'NO'),
+                    ('objective', lambda col: col['Type'] == 'text' and col['Null'] == 'NO'),
+                    ('is_complex', lambda col: col['Type'] == 'tinyint(1)' and col['Null'] == 'NO'),
+                    ('input_type', lambda col: col['Type'] == 'varchar(100)' and col['Null'] == 'NO'),
+                    ('type_savepoint', lambda col: col['Type'] == 'json' and col['Null'] == 'NO'),
+                    ('embedding', lambda col: col['Type'].startswith('vector') and col['Null'] == 'NO'),
+                ]
+                
+                for field_name, check_func in required_checks:
+                    if field_name not in column_map:
+                        print(f"❌ [PRECEDENT] Missing required column: {field_name}")
+                        return False
+                    if not check_func(column_map[field_name]):
+                        print(f"❌ [PRECEDENT] Column {field_name} has incorrect type: {column_map[field_name]['Type']}")
+                        return False
+                
+                print("✅ [PRECEDENT] Table structure validation passed")
+                return True
+                
+    except MySQLdb.Error as e:
+        if e.args[0] == 1146:  # Table doesn't exist
+            print("📋 [PRECEDENT] Table doesn't exist yet")
+            return False
+        print(f"❌ [PRECEDENT] Error validating table structure: {e}")
+        return False
+
+def create_precedent_table():
+    """Create the precedent table with correct TiDB VECTOR structure."""
+    create_table_sql = """
+    CREATE TABLE precedent (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        description TEXT NOT NULL COMMENT 'Task description + overall workflow description + conversation log (used for semantic search)',
+        path JSON NOT NULL COMMENT 'List of PathToolMetadata in JSON format representing the workflow',
+        router_format JSON NOT NULL COMMENT 'Router response in JSON format of the workflow',
+        messages TEXT NOT NULL COMMENT 'Conversation paragraph of the workflow in string format',
+        objective TEXT NOT NULL COMMENT 'State variable',
+        is_complex BOOLEAN NOT NULL COMMENT 'State variable indicating complexity',
+        input_type VARCHAR(100) NOT NULL COMMENT 'State variable for input type',
+        type_savepoint JSON NOT NULL COMMENT 'State variable as list of strings stored in JSON format',
+        embedding VECTOR(384) NOT NULL COMMENT 'Vector embedding of the description for semantic search',
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+    )
+    """
+    
+    with get_db_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(create_table_sql)
+            # Reset AUTO_INCREMENT to start from 1
+            cur.execute("ALTER TABLE precedent AUTO_INCREMENT = 1")
+            print("✅ [PRECEDENT] Precedent table created successfully")
+            print("🔢 [PRECEDENT] AUTO_INCREMENT reset to start from 1")
+
+def ensure_correct_table_structure():
+    """Ensure the precedent table has the correct structure, recreating if necessary."""
+    try:
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                # Check if table exists
+                cur.execute("SHOW TABLES LIKE 'precedent'")
+                table_exists = cur.fetchone() is not None
+                
+                if table_exists:
+                    print("📋 [PRECEDENT] Table exists, validating structure...")
+                    if validate_table_structure():
+                        print("✅ [PRECEDENT] Table structure is correct")
+                        return
+                    else:
+                        print("⚠️ [PRECEDENT] Table structure is incorrect, dropping and recreating...")
+                        cur.execute("DROP TABLE precedent")
+                        print("🗑️ [PRECEDENT] Old table dropped")
+                
+                print("🔧 [PRECEDENT] Creating precedent table with correct structure...")
+                create_precedent_table()
+                
+    except Exception as e:
+        print(f"❌ [PRECEDENT] Error ensuring table structure: {e}")
+        raise
 
 # Initialize components once during startup (called from main.py)
 def initialize_global_clients():
-    """Initialize global TiDB client, reranker, and embedding model once during startup."""
-    global _tidb_client, _reranker, _embedding_model
+    """Initialize global database connection, reranker, and embedding model once during startup."""
+    global _reranker, _embedding_model
     
     print("🔧 [PRECEDENT] Initializing global precedent clients...")
     
-    if _tidb_client is None:
-        connection_string = os.environ.get('TIDB_CONNECTION_STRING')
-        if not connection_string:
-            raise ValueError("TIDB_CONNECTION_STRING environment variable not set")
-        _tidb_client = TiDBClient.connect(connection_string)
-        print("✅ [PRECEDENT] TiDB client initialized successfully")
+    # Test the database connection and ensure correct table structure
+    try:
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT DATABASE() as current_db")
+                current_db = cur.fetchone()[0]
+                print(f"✅ [PRECEDENT] Connected to TiDB database: {current_db}")
+                
+                # Ensure the table has the correct structure
+                ensure_correct_table_structure()
+                    
+    except Exception as e:
+        print(f"❌ [PRECEDENT] Database connection failed: {e}")
+        raise
     
+    # Initialize reranker (required)
     if _reranker is None:
         print("🔧 [PRECEDENT] Loading reranker model: jina_ai/jina-reranker-v1-tiny-en...")
         _reranker = Reranker(model_name="jina_ai/jina-reranker-v1-tiny-en")
         print("✅ [PRECEDENT] Reranker initialized successfully")
     
+    # Initialize embedding model (required)
     if _embedding_model is None:
         print("🔧 [PRECEDENT] Loading embedding model: all-MiniLM-L6-v2...")
         _embedding_model = SentenceTransformer("all-MiniLM-L6-v2")
@@ -51,62 +211,9 @@ def initialize_global_clients():
         print(f"🧠 [PRECEDENT] Model produces {dimensions}-dimensional embeddings")
         
         if dimensions != 384:
-            print(f"⚠️  [PRECEDENT] WARNING: Expected 384 dimensions but got {dimensions}")
-            print(f"  Make sure your TiDB table uses VECTOR({dimensions}) column")
+            raise RuntimeError(f"Expected 384 dimensions but got {dimensions}")
     
-    print("🎉 [PRECEDENT] All global clients initialized successfully!")
-
-
-def _get_tidb_client():
-    """Get the global TiDB client (must be initialized first via initialize_global_clients())."""
-    if _tidb_client is None:
-        raise RuntimeError("TiDB client not initialized. Call initialize_global_clients() first.")
-    return _tidb_client
-
-
-def _get_precedent_table():
-    """Get the precedent table from TiDB client."""
-    print("📋 [PRECEDENT] Getting TiDB precedent table...")
-    client = _get_tidb_client()
-    
-    # Ensure we're using the correct database
-    try:
-        current_db = client.current_database()
-        print(f"📊 [PRECEDENT] Current database: {current_db}")
-        
-        if current_db != "precedent_db":
-            print(f"🔄 [PRECEDENT] Switching to precedent_db database...")
-            client.use_database("precedent_db")
-            print(f"✅ [PRECEDENT] Now using database: {client.current_database()}")
-        
-        # List available tables for debugging
-        tables = client.list_tables()
-        print(f"📋 [PRECEDENT] Available tables: {tables}")
-        
-        # Attempt to open the precedent table
-        table = client.open_table("precedent")
-        
-        if table is None:
-            error_msg = (
-                "❌ [PRECEDENT] Table 'precedent' exists but cannot be opened. "
-                "This usually means the table wasn't created with vector search capabilities. "
-                "Please recreate the table with proper VECTOR column and indexing."
-            )
-            print(error_msg)
-            raise RuntimeError(error_msg)
-        
-        print(f"✅ [PRECEDENT] TiDB precedent table opened successfully")
-        return table
-        
-    except Exception as e:
-        print(f"❌ [PRECEDENT] Failed to get precedent table: {e}")
-        print("Please ensure:")
-        print("  1. The 'precedent_db' database exists")
-        print("  2. The 'precedent' table exists with vector search capabilities")
-        print("  3. The table has a VECTOR(384) column for embeddings (all-MiniLM-L6-v2 dimensions)")
-        print("  4. The table has a vector index created with: CREATE VECTOR INDEX idx_embedding ON precedent ((VEC_COSINE_DISTANCE(embedding))) USING HNSW;")
-        raise
-
+    print("🎉 [PRECEDENT] Global clients initialization complete!")
 
 def generate_embedding(text: str) -> List[float]:
     """
@@ -120,9 +227,9 @@ def generate_embedding(text: str) -> List[float]:
     """
     if _embedding_model is None:
         raise RuntimeError("Embedding model not initialized. Call initialize_global_clients() first.")
+    
     embedding = _embedding_model.encode(text)
     return embedding.tolist()
-
 
 def create_description_for_embedding(objective: str,
                                    chosen_path: List[Dict[str, Any]],
@@ -164,21 +271,25 @@ conversation: {cleaned_messages[:500]}"""  # Limit message length to avoid embed
     
     return description
 
-
 def _clean_messages_for_embedding(messages: str) -> str:
     """
     Remove file attachments from messages for cleaner vector matching.
     
-    Pattern from websocket.py:
-    orchestrator_content = f"{content}\n\n<files>\n{files_text}\n</files>"
+    Patterns to handle:
+    1. <files>...</files> blocks (remove entirely)
+    2. <file>...</file> individual references (replace with "file_path")
     """
     
-    # Remove XML-style file attachments: <files>...</files>
+    # Remove XML-style file attachment blocks: <files>...</files>
     cleaned = re.sub(r'\n\n<files>.*?</files>', '', messages, flags=re.DOTALL)
     
-    # Also clean up any standalone file reference patterns that might exist
-    # Remove lines that look like file paths or references
-    cleaned = re.sub(r'^.*\.(txt|md|py|js|ts|json|xml|html|css|sql|yaml|yml|csv|pdf).*$', '', cleaned, flags=re.MULTILINE)
+    # Replace individual file references with generic "file_path"
+    # Pattern: <file>/path/to/file.ext</file> -> file_path
+    cleaned = re.sub(r'<file>.*?</file>', 'file_path', cleaned, flags=re.DOTALL)
+    
+    # Also clean up any remaining standalone file reference patterns
+    # Remove lines that look like raw file paths or references
+    cleaned = re.sub(r'^.*\.(txt|md|py|js|ts|json|xml|html|css|sql|yaml|yml|csv|pdf|wav|mp3|mp4|png|jpg|jpeg|gif).*$', '', cleaned, flags=re.MULTILINE)
     
     # Remove excessive whitespace
     cleaned = re.sub(r'\n\s*\n', '\n', cleaned)
@@ -186,13 +297,12 @@ def _clean_messages_for_embedding(messages: str) -> str:
     
     return cleaned
 
-
 def search_similar_precedents(query_text: str,
-                             threshold: float = 0.7,
+                             threshold: float = 0.5,
                              limit: int = 3) -> List[Dict[str, Any]]:
     """
-    Search for similar precedents using TiDB hybrid search (vector + full-text).
-    Uses the TiDB SDK for simple hybrid search with reranking.
+    Search for similar precedents using TiDB's native vector search with MySQLdb.
+    Uses VEC_COSINE_DISTANCE function for efficient vector similarity search.
     
     Args:
         query_text: Text to search for similar precedents
@@ -201,73 +311,103 @@ def search_similar_precedents(query_text: str,
         
     Returns:
         List of precedent dictionaries with cosine similarity scores.
-        Each dict contains a 'score' field with values 0.0-1.0 where:
-        - 1.0 = Perfect match
-        - 0.8+ = High similarity (recommended for precedent matching)
-        - 0.0 = No similarity
-        
-    Note: Converts TiDB distance (lower=better) to cosine similarity (higher=better)
-    for intuitive interpretation in orchestrator logic.
     """
     print(f"🔍 [PRECEDENT SEARCH] Starting search for: '{query_text[:100]}...'")
     print(f"📊 [PRECEDENT SEARCH] Parameters: threshold={threshold}, limit={limit}")
     
     try:
-        table = _get_precedent_table()
+        print(_embedding_model)
+        if _embedding_model is None:
+            raise RuntimeError("Embedding model not initialized. Call initialize_global_clients() first.")
         
-        # Hybrid search with reranking - exactly like the documentation
-        if _reranker is None:
-            raise RuntimeError("Reranker not initialized. Call initialize_global_clients() first.")
+        # Generate embedding for the query
+        query_embedding = _embedding_model.encode(query_text).tolist()
         
-        print("🔍 [PRECEDENT SEARCH] Executing TiDB hybrid search with reranking...")
-        results = (
-            table.search(query_text, search_type="hybrid")
-            .rerank(_reranker, "description")  # Rerank based on description field
-            .limit(limit)
-            .to_dict()  # Convert to dictionary format
-        )
-        print(f"📋 [PRECEDENT SEARCH] TiDB returned {len(results)} raw results")
+        # Use TiDB's native vector search with VEC_COSINE_DISTANCE
+        # Convert threshold to distance (distance = 1 - similarity)
+        distance_threshold = 1.0 - threshold
         
+        search_sql = """
+        SELECT id, description, path, router_format, messages, objective, 
+               is_complex, input_type, type_savepoint, created_at,
+               VEC_COSINE_DISTANCE(embedding, %s) as distance
+        FROM precedent 
+        WHERE VEC_COSINE_DISTANCE(embedding, %s) <= %s
+        ORDER BY distance ASC
+        LIMIT %s
+        """
+        
+        with get_db_connection() as conn:
+            with conn.cursor(MySQLdb.cursors.DictCursor) as cur:
+                # Convert embedding list to the format TiDB expects for VECTOR column
+                embedding_str = json.dumps(query_embedding)
+                cur.execute(search_sql, (embedding_str, embedding_str, distance_threshold, limit))
+                results = cur.fetchall()
+                
+        if not results:
+            print("📋 [PRECEDENT SEARCH] No similar precedents found")
+            return []
+        
+        print(f"📋 [PRECEDENT SEARCH] Found {len(results)} similar precedents")
+        print(results)
         # Convert results to our expected format
-        print("🔄 [PRECEDENT SEARCH] Converting TiDB results to precedent format...")
         precedents = []
         for i, result in enumerate(results):
-            # Convert TiDB distance to cosine similarity for intuitive scoring
-            distance = result.get("distance", 1.0)
-            similarity_score = max(0.0, 1.0 - distance)  # Ensure non-negative
-            print(f"📊 [PRECEDENT SEARCH] Result {i+1}: distance={distance:.4f}, similarity={similarity_score:.4f}")
+            # Convert distance back to similarity score
+            distance = float(result['distance'])
+            similarity_score = max(0.0, 1.0 - distance)
             
-            # Extract metadata and document fields
             precedent_dict = {
-                "id": result.get("id"),
-                "description": result.get("description", result.get("document", "")),
-                "path": json.loads(result["path"]) if isinstance(result.get("path"), str) else result.get("path"),
-                "router_format": json.loads(result["router_format"]) if isinstance(result.get("router_format"), str) else result.get("router_format"),
-                "messages": result.get("messages", ""),
-                "objective": result.get("objective", ""),
-                "is_complex": result.get("is_complex", False),
-                "input_type": result.get("input_type", ""),
-                "type_savepoint": json.loads(result["type_savepoint"]) if isinstance(result.get("type_savepoint"), str) else result.get("type_savepoint", []),
-                "created_at": result.get("created_at"),
-                "score": similarity_score  # Universal cosine similarity score (0.0-1.0, higher=better)
+                "id": result['id'],
+                "description": result['description'],
+                "path": json.loads(result['path']) if isinstance(result.get('path'), str) else result.get('path'),
+                "router_format": json.loads(result['router_format']) if isinstance(result.get('router_format'), str) else result.get('router_format'),
+                "messages": result.get('messages', ''),
+                "objective": result.get('objective', ''),
+                "is_complex": bool(result.get('is_complex', False)),
+                "input_type": result.get('input_type', ''),
+                "type_savepoint": json.loads(result['type_savepoint']) if isinstance(result.get('type_savepoint'), str) else result.get('type_savepoint', []),
+                "created_at": result.get('created_at'),
+                "score": similarity_score  # Cosine similarity score (0.0-1.0, higher=better)
             }
-            
-            # Only include results above threshold (now using similarity)
-            if precedent_dict["score"] >= threshold:
-                precedents.append(precedent_dict)
-                print(f"✅ [PRECEDENT SEARCH] Added precedent {i+1}: ID={precedent_dict['id']}, score={precedent_dict['score']:.4f}")
-                print(f"🎯 [PRECEDENT SEARCH] Precedent objective: '{precedent_dict['objective'][:100]}...'")
-            else:
-                print(f"❌ [PRECEDENT SEARCH] Skipped precedent {i+1}: score={precedent_dict['score']:.4f} < threshold={threshold}")
+            precedents.append(precedent_dict)
+            print(f"✅ [PRECEDENT SEARCH] Precedent {i+1}: ID={precedent_dict['id']}, score={precedent_dict['score']:.4f}")
+        
+        # Apply reranking if available
+        if precedents and _reranker:
+            print("🔄 [PRECEDENT SEARCH] Applying reranking...")
+            precedents = rerank_precedents(query_text, precedents, top_k=limit)
         
         print(f"🎉 [PRECEDENT SEARCH] Search complete! Found {len(precedents)} precedents above threshold")
         return precedents
         
     except Exception as e:
-        print(f"❌ [PRECEDENT SEARCH] Error in TiDB hybrid search: {e}")
-        print(f"🔧 [PRECEDENT SEARCH] Returning empty results due to error")
-        return []
+        print(f"❌ [PRECEDENT SEARCH] Error in vector search: {e}")
+        raise
 
+def rerank_precedents(query: str, precedents: List[Dict[str, Any]], top_k: int = 5) -> List[Dict[str, Any]]:
+    """Rerank precedents using the reranker model."""
+    if not precedents:
+        return precedents[:top_k]
+    
+    if _reranker is None:
+        raise RuntimeError("Reranker not initialized. Call initialize_global_clients() first.")
+    
+    # Prepare documents for reranking
+    documents = [f"{p.get('objective', '')} - {p.get('description', '')}" for p in precedents]
+    
+    # Rerank using the reranker
+    reranked_results = _reranker.rerank(query, documents, top_n=min(top_k, len(documents)))
+    print(f"🎉 [PRECEDENT SEARCH] Reranked results:\n{reranked_results}")
+    # Return reranked precedents
+    reranked_precedents = []
+    for result in reranked_results:
+        precedent_idx = result.index
+        precedent = precedents[precedent_idx].copy()
+        precedent['rerank_score'] = result.relevance_score
+        reranked_precedents.append(precedent)
+    print(f"🎉 [PRECEDENT SEARCH] Reranked precedents:\n{reranked_precedents}")
+    return reranked_precedents
 
 def save_workflow_precedent(objective: str,
                            chosen_path: List[Dict[str, Any]],
@@ -275,9 +415,9 @@ def save_workflow_precedent(objective: str,
                            messages: str,
                            input_type: str,
                            is_complex: bool,
-                           type_savepoint: List[str]) -> Optional[str]:
+                           type_savepoint: List[str]) -> str:
     """
-    Save a new precedent with vector embedding using TiDB SDK.
+    Save a new precedent with vector embedding using MySQLdb and TiDB VECTOR column.
     Uses the structured format from create_description_for_embedding.
     
     Args:
@@ -290,15 +430,20 @@ def save_workflow_precedent(objective: str,
         type_savepoint: List of type savepoints
         
     Returns:
-        ID of created precedent, or None if failed
+        ID of created precedent (auto-increment integer as string)
+        
+    Raises:
+        RuntimeError: If embedding model not initialized
+        Exception: If database save operation fails
     """
     print(f"💾 [PRECEDENT SAVE] Starting precedent save process...")
     print(f"🎯 [PRECEDENT SAVE] Objective: '{objective[:100]}...'")
     print(f"📊 [PRECEDENT SAVE] Workflow has {len(chosen_path)} steps, input_type: {input_type}, complex: {is_complex}")
     
+    if _embedding_model is None:
+        raise RuntimeError("Embedding model not initialized. Call initialize_global_clients() first.")
+    
     try:
-        table = _get_precedent_table()
-        
         # Create formatted description for embedding and search
         print("📝 [PRECEDENT SAVE] Creating formatted description for embedding...")
         description = create_description_for_embedding(
@@ -313,42 +458,38 @@ def save_workflow_precedent(objective: str,
         embedding = generate_embedding(description)
         print(f"🧠 [PRECEDENT SAVE] Generated embedding with {len(embedding)} dimensions")
         
-        # Generate unique ID for this precedent
-        import uuid
-        precedent_id = str(uuid.uuid4())
-        print(f"🆔 [PRECEDENT SAVE] Generated precedent ID: {precedent_id}")
+        # Insert using MySQLdb with TiDB VECTOR column
+        insert_sql = """
+        INSERT INTO precedent (description, path, router_format, messages, objective, 
+                              is_complex, input_type, type_savepoint, embedding)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+        """
         
-        # Prepare document for insertion - exactly like the documentation
-        document = {
-            "id": precedent_id,
-            "text": description,  # The formatted description for search
-            "embedding": embedding,
-            "metadata": {
-                "objective": objective,
-                "path": chosen_path,  # Store full path metadata
-                "router_format": router_format,
-                "messages": messages,
-                "input_type": input_type,
-                "is_complex": is_complex,
-                "type_savepoint": type_savepoint,
-                "created_at": datetime.utcnow().isoformat()
-            }
-        }
-        
-        # Insert using TiDB SDK - like the documentation
-        print("🔄 [PRECEDENT SAVE] Inserting document into TiDB...")
-        table.insert(
-            ids=[document["id"]],
-            texts=[document["text"]],
-            embeddings=[document["embedding"]], 
-            metadatas=[document["metadata"]]
-        )
-        
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                # Convert embedding list to JSON string for VECTOR column
+                embedding_str = json.dumps(embedding)
+                
+                cur.execute(insert_sql, (
+                    description,  # Store formatted description
+                    json.dumps(chosen_path),
+                    json.dumps(router_format),
+                    messages,
+                    objective,
+                    is_complex,
+                    input_type,
+                    json.dumps(type_savepoint),
+                    embedding_str  # TiDB VECTOR column accepts JSON string format
+                ))
+                
+                # Get the auto-generated ID
+                precedent_id = conn.insert_id()
+                
         print(f"✅ [PRECEDENT SAVE] Successfully saved precedent with ID: {precedent_id}")
-        print(f"📊 [PRECEDENT SAVE] Document size: text={len(document['text'])} chars, metadata keys={list(document['metadata'].keys())}")
-        return precedent_id
+        print(f"📊 [PRECEDENT SAVE] Document size: text={len(description)} chars")
+        return str(precedent_id)
         
     except Exception as e:
         print(f"❌ [PRECEDENT SAVE] Error saving precedent: {e}")
         print(f"🔧 [PRECEDENT SAVE] Failed to save precedent for objective: '{objective[:100]}...'")
-        return None
+        raise

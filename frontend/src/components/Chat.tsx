@@ -150,6 +150,7 @@ export function Chat({ logoPath, logoPaths, logoViewBox = "0 0 1024 1024", logoS
           let workflow: { sections: Array<any> } | undefined = undefined;
           if (m.role === 'assistant') {
             const titles: Record<string, string> = {
+              precedent: "Searching for precedent...",
               classify: "Classifying...",
               find_path: "Searching for possible paths...",
               route: "Selecting the path...",
@@ -206,13 +207,26 @@ export function Chat({ logoPath, logoPaths, logoViewBox = "0 0 1024 1024", logoS
                 sectionsMap.set('execute', { node: 'execute', title: titles['execute'], status: titles['execute'], reasoning_content: '', is_thinking: false, clarification: null });
               }
               const ordered: any[] = [];
-              for (const key of ['classify', 'find_path', 'route', 'execute', 'finalize']) {
+              // Always include precedent first if present
+              const precedentSec = sectionsMap.get('precedent');
+              if (precedentSec) ordered.push(precedentSec);
+              
+              // Only include find_path if classify exists (don't show it if going directly from precedent to route)
+              const classifySec = sectionsMap.get('classify');
+              if (classifySec) {
+                ordered.push(classifySec);
+                const findPathSec = sectionsMap.get('find_path');
+                if (findPathSec) ordered.push(findPathSec);
+              }
+              
+              // Add remaining workflow steps
+              for (const key of ['route', 'execute', 'finalize']) {
                 const sec = sectionsMap.get(key);
                 if (sec) ordered.push(sec);
               }
               // Include any extra nodes in insertion order
               for (const [k, sec] of sectionsMap.entries()) {
-                if (!['classify', 'find_path', 'route', 'execute', 'finalize'].includes(k)) {
+                if (!['precedent', 'classify', 'find_path', 'route', 'execute', 'finalize'].includes(k)) {
                   ordered.push(sec);
                 }
               }
@@ -233,6 +247,7 @@ export function Chat({ logoPath, logoPaths, logoViewBox = "0 0 1024 1024", logoS
             state_id: m.state?.uid as any, 
             timestamp: (m as any).timestamp ?? new Date().toISOString(), 
             has_state: Boolean(m.state),
+            precedent_id: m.precedent_id,
           };
         }) as MessageResponse[];
         

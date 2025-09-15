@@ -84,9 +84,9 @@ class Orchestrator:
             if user_query:
                 print("🔍 [ORCHESTRATOR] Starting precedent search...")
                 try:
-                    # Import here to avoid circular imports
-                    from backend.app.db.precedent import search_similar_precedents
-                    precedents = search_similar_precedents(user_query, threshold=0.7, limit=3)
+                    # Import here to avoid circular imports and ensure a single module instance
+                    from app.db.precedent import search_similar_precedents
+                    precedents = search_similar_precedents(user_query, threshold=0.5, limit=3)
                     print(f"✅ [ORCHESTRATOR] Found {len(precedents)} precedents for query")
                     self.logger.info("Found %d precedents for query: %s", len(precedents), user_query[:100])
                 except Exception as e:

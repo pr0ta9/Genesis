@@ -28,6 +28,7 @@ class MessageResponse(BaseModel):
     state_id: Optional[str] = None
     timestamp: datetime
     has_state: bool = False
+    precedent_id: Optional[int] = None
     
     class Config:
         from_attributes = True
@@ -52,6 +53,11 @@ class StateResponse(BaseModel):
     is_complex: Optional[bool] = None
     classify_reasoning: Optional[str] = None
     classify_clarification: Optional[str] = None
+
+    # Precedent node fields
+    precedents_found: Optional[List[Dict]] = None
+    precedent_reasoning: Optional[str] = None
+    precedent_clarification: Optional[str] = None
     
     # FIX: Correct types for path-related fields
     tool_metadata: Optional[List[Dict]] = None  

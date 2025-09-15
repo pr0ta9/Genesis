@@ -53,6 +53,7 @@ export interface MessageResponse {
   state_id?: string | null;
   timestamp: ISODate;
   has_state: boolean;
+  precedent_id?: number | null;
 }
 
 export interface StateResponseBasic {

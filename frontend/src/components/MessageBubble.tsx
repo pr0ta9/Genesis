@@ -17,11 +17,13 @@ export function MessageBubble({ message }: MessageBubbleProps) {
   const [userHover, setUserHover] = useState(false);
   const userRef = useRef<HTMLDivElement | null>(null);
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
-  const { currentConversationId } = (useApp() as any) || {};
+  const { currentConversationId, dispatch } = (useApp() as any) || {};
   
   // Precedent saving state
-  const [precedentSaved, setPrecedentSaved] = useState(false);
   const [savingPrecedent, setSavingPrecedent] = useState(false);
+  
+  // Check if precedent is already saved based on precedent_id
+  const isPrecedentSaved = Boolean(message.precedent_id);
 
   // Extract <file>...</file> tags from assistant content
   function extractFileTags(text: string | undefined): string[] {
@@ -87,6 +89,12 @@ export function MessageBubble({ message }: MessageBubbleProps) {
    const handleSavePrecedent = async () => {
     console.log('🎯 [FRONTEND] Starting precedent save process...');
     
+    // Don't save if already saved
+    if (isPrecedentSaved) {
+      console.log('⚠️  [FRONTEND] Precedent already saved, skipping...');
+      return;
+    }
+    
     if (!message.conversation_id) {
       console.error('❌ [FRONTEND] No conversation ID available for precedent saving');
       console.log('📊 [FRONTEND] Message object keys:', Object.keys(message));
@@ -131,14 +139,16 @@ export function MessageBubble({ message }: MessageBubbleProps) {
           message: result.message
         });
         
-        setPrecedentSaved(true);
-        console.log('🎉 [FRONTEND] Updated UI to show success state');
-        
-        // Show success message briefly
-        setTimeout(() => {
-          setPrecedentSaved(false);
-          console.log('🔄 [FRONTEND] Reset success state after 3 seconds');
-        }, 3000);
+        // Update the message state with the precedent_id
+        if (result.precedent_id && dispatch) {
+          const precedentId = parseInt(result.precedent_id.toString(), 10);
+          dispatch({
+            type: "update_message_precedent",
+            messageId: message.id.toString(),
+            precedentId: precedentId
+          });
+          console.log('🎉 [FRONTEND] Updated message with precedent_id:', precedentId, '(converted from:', result.precedent_id, ')');
+        }
       } else {
         const error = await response.json();
         console.error('❌ [FRONTEND] API returned error status:', response.status);
@@ -463,22 +473,22 @@ export function MessageBubble({ message }: MessageBubbleProps) {
                   </button>
 
                   {/* Regenerate Button */}
-                  <button
+                  {/* <button
                     className="flex items-center justify-center w-7 h-7 rounded hover:bg-gray-100 transition-colors"
                     aria-label="Regenerate response"
                   >
                     <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" className="text-gray-500">
                       <path d="M7.92142 0.349213C10.3745 0.349295 12.5564 1.50526 13.9558 3.299L15.1282 2.12765C15.3304 1.92552 15.6768 2.06949 15.6768 2.35544V5.53929C15.6766 5.71632 15.533 5.85982 15.356 5.86008H12.1711C11.8855 5.85976 11.7427 5.51471 11.9443 5.31255L12.9642 4.29062C11.8238 2.74311 9.98914 1.74112 7.92142 1.74104C4.46442 1.74104 1.66239 4.54307 1.66239 8.00006C1.66239 11.4571 4.46442 14.2591 7.92142 14.2591C11.3783 14.2589 14.1804 11.457 14.1804 8.00006H15.5723C15.5723 12.2252 12.1465 15.6508 7.92142 15.6509C3.6962 15.6509 0.270569 12.2253 0.270569 8.00006C0.270569 3.77485 3.6962 0.349213 7.92142 0.349213Z" fill="currentColor"/>
                     </svg>
-                  </button>
+                  </button> */}
 
                   {/* Thumbs Up - Save as Precedent */}
-                  {precedentSaved ? (
+                  {isPrecedentSaved ? (
                     <div className="flex items-center text-green-600 text-xs px-2">
                       <svg className="w-4 h-4 mr-1" fill="currentColor" viewBox="0 0 20 20">
                         <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
                       </svg>
-                      Saved!
+                      Precedent Saved!
                     </div>
                   ) : (
                     <button
@@ -506,14 +516,14 @@ export function MessageBubble({ message }: MessageBubbleProps) {
                   )}
 
                   {/* Thumbs Down */}
-                  <button
+                  {/* <button
                     className="flex items-center justify-center w-7 h-7 rounded hover:bg-gray-100 transition-colors"
                     aria-label="Dislike response"
                   >
                     <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" className="text-gray-500">
                       <path d="M7.72451 15.1086C7.18929 15.7706 6.22975 15.8695 5.57357 15.3598L5.44643 15.2493L5.42247 15.2253L5.41934 15.2233L5.39016 15.1941C4.68239 14.4805 4.40679 13.4442 4.66589 12.4731L4.66693 12.4689L4.67631 12.4335L4.67735 12.4314L5.14318 10.7432C5.15243 10.7096 5.1613 10.6784 5.16923 10.6494C5.13878 10.6493 5.10558 10.6484 5.07023 10.6484H4.14274C3.62288 10.6484 3.27015 10.6513 2.9912 10.6035C1.25757 10.3069 0.103662 8.64709 0.42863 6.91861C0.480965 6.64044 0.606164 6.30981 0.787119 5.8223L1.73336 3.27328C1.92812 2.74859 2.08912 2.31215 2.25442 1.96542C2.42515 1.60731 2.62191 1.296 2.91304 1.03584C3.08408 0.883016 3.273 0.751185 3.47579 0.644009C3.82102 0.461569 4.18214 0.385575 4.57731 0.350131C4.95993 0.315849 5.42553 0.316783 5.98521 0.316783H11.0916C11.876 0.316783 12.52 0.316134 13.0362 0.372015C13.5655 0.429358 14.0423 0.552599 14.4608 0.856601C14.7007 1.03091 14.9117 1.24199 15.086 1.48187C15.3901 1.90033 15.5143 2.37716 15.5717 2.90645C15.6276 3.42275 15.6269 4.06727 15.6269 4.85209V6.5028C15.6269 7.16167 15.633 7.63697 15.5164 8.04306C15.2475 8.97969 14.5158 9.71248 13.5791 9.9814C13.173 10.098 12.6977 10.0908 12.0389 10.0908C11.8372 10.0908 11.8118 10.0933 11.795 10.096C11.723 10.1077 11.6549 10.1394 11.6012 10.1888C11.5887 10.2003 11.5724 10.2191 11.447 10.3784L7.74639 15.0815L7.74535 15.0826L7.72451 15.1086ZM14.2388 4.85209C14.2388 4.03635 14.2379 3.47971 14.1919 3.05547C14.1473 2.64449 14.0672 2.44037 13.9637 2.29785C13.8749 2.17569 13.768 2.06776 13.6458 1.97896C13.5033 1.87539 13.2984 1.7953 12.8872 1.75074C12.4907 1.70779 11.979 1.70518 11.2479 1.70489C11.6511 2.25924 11.8918 2.93974 11.8919 3.67762V7.41257H10.5038V3.67762C10.5036 2.58751 9.62023 1.70384 8.53007 1.70384H5.98521C5.40065 1.70384 5.00679 1.70449 4.70028 1.73198C4.40651 1.75836 4.24662 1.80577 4.12399 1.87058C4.02069 1.92518 3.92452 1.99283 3.8374 2.07067C3.73401 2.16312 3.634 2.29627 3.50705 2.56255C3.37462 2.84034 3.23734 3.2088 3.03393 3.75682L2.08768 6.30584C1.88395 6.85474 1.81646 7.04347 1.79172 7.17497C1.61005 8.14152 2.25533 9.06908 3.22464 9.23524C3.35654 9.25781 3.55717 9.26129 4.14274 9.26129H5.07023C5.25717 9.26129 5.4593 9.25932 5.62672 9.27901C5.80364 9.29982 6.05492 9.35458 6.27179 9.551C6.37381 9.64347 6.45784 9.75424 6.51982 9.87719C6.65133 10.1382 6.6374 10.3942 6.61048 10.5702C6.58498 10.7367 6.52988 10.931 6.48022 11.1111L6.01439 12.8003L6.00501 12.8347C5.87513 13.3268 6.01464 13.8509 6.37184 14.2134L6.40935 14.251L6.46667 14.2864C6.52866 14.3088 6.60155 14.2912 6.64591 14.2364L6.65738 14.2239L6.65633 14.2228L10.3569 9.52078C10.4543 9.397 10.5491 9.27245 10.6633 9.1675C10.9166 8.93483 11.2325 8.78186 11.572 8.72669C11.7251 8.70184 11.8814 8.70376 12.0389 8.70376C12.7927 8.70376 13.0245 8.69651 13.1956 8.64748C13.6727 8.51051 14.0465 8.13768 14.1836 7.6606C14.2327 7.48941 14.2388 7.25727 14.2388 6.5028V4.85209Z" fill="currentColor"/>
                     </svg>
-                  </button>
+                  </button> */}
                 </div>
                 <div style={{flex: "1 1 0%"}}></div>
               </div>

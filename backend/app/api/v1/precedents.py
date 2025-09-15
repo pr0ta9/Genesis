@@ -49,12 +49,14 @@ async def save_workflow_precedent(
     
     # Find the most recent completed workflow state
     latest_state = None
+    latest_state_message_id = None
     for message in reversed(messages):  # Start from most recent
         if message.state_id:
             state = crud.get_state(db, message.state_id)
             if state and state.is_complete:
                 latest_state = state
-                print(f"✅ [PRECEDENT API] Found completed workflow state: {state.uid}")
+                latest_state_message_id = message.id
+                print(f"✅ [PRECEDENT API] Found completed workflow state: {state.uid} (message_id={message.id})")
                 break
     
     if not latest_state:
@@ -89,11 +91,19 @@ async def save_workflow_precedent(
         
         if precedent_id:
             print(f"✅ [PRECEDENT API] Successfully saved precedent: {precedent_id}")
+            # Link the created precedent to the assistant message that produced the completed state
+            try:
+                if latest_state_message_id is not None:
+                    crud.set_message_precedent_id(db, latest_state_message_id, int(precedent_id))
+                    print(f"🔗 [PRECEDENT API] Linked precedent_id={precedent_id} to message_id={latest_state_message_id}")
+            except Exception as e:
+                print(f"⚠️ [PRECEDENT API] Failed to link precedent to message: {e}")
             return {
                 "success": True,
                 "precedent_id": precedent_id,
                 "message": "Workflow precedent saved successfully",
-                "conversation_id": conversation_id
+                "conversation_id": conversation_id,
+                "message_id": latest_state_message_id
             }
         else:
             print(f"❌ [PRECEDENT API] Failed to save precedent to TiDB")

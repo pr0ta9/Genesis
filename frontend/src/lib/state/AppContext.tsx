@@ -9,6 +9,7 @@ import { calculateNodePositions } from "../graph/layout";
 
 export type Stage =
   | "start"
+  | "precedent"
   | "classify"
   | "find_path"
   | "route"
@@ -70,6 +71,7 @@ type Action =
   | { type: "update_reasoning"; messageId: string; reasoning: string; isComplete?: boolean }
   | { type: "complete_reasoning"; messageId: string; thinkingTime?: number }
   | { type: "update_message_content"; messageId: string; content: string }
+  | { type: "update_message_precedent"; messageId: string; precedentId: number }
   // Workflow reasoning per-stage
   | { type: "workflow_start_stage"; messageId: string; node: string; title: string; status: string; startedAt?: string }
   | { type: "workflow_update_reasoning"; messageId: string; node: string; text: string }
@@ -204,6 +206,16 @@ function reducer(state: AppState, action: Action): AppState {
         messages: state.messages.map(m => 
           m.id.toString() === action.messageId
             ? { ...m, content: action.content }
+            : m
+        )
+      };
+    case "update_message_precedent":
+      console.log("🎯 Updating message precedent:", action.messageId, "precedentId:", action.precedentId);
+      return {
+        ...state,
+        messages: state.messages.map(m => 
+          m.id.toString() === action.messageId
+            ? { ...m, precedent_id: action.precedentId }
             : m
         )
       };
@@ -661,6 +673,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             // New: also route reasoning into workflow sections when node is present
             const node: string | undefined = d.data?.node;
             const stageTitles: Record<string, string> = {
+              precedent: "Searching for precedents...",
               classify: "Classifying...",
               find_path: "Searching for possible paths...",
               route: "Selecting the path...",
@@ -703,6 +716,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
               const stage = node as Stage;
               if (
                 stage === "start" ||
+                stage === "precedent" ||
                 stage === "classify" ||
                 stage === "find_path" ||
                 stage === "route" ||
@@ -736,6 +750,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
               const fmId = d.frontend_message_id || state.currentReasoningMessageId;
               const stageNode: string | undefined = d.data?.node || d.data?.next_node;
               const titles: Record<string, string> = {
+                precedent: "Searching for precedents...",
                 classify: "Classifying...",
                 find_path: "Searching for possible paths...",
                 route: "Selecting the path...",
@@ -745,9 +760,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
               if (fmId && stageNode) {
                 const title = titles[stageNode] || stageNode;
                 dispatch({ type: "workflow_start_stage", messageId: fmId, node: stageNode, title, status: title });
-                // If route provided a chosen_path, ensure find_path title is present
+                // If route provided a chosen_path, ensure find_path title is present only if there was a classify step
                 const chosen = d.data?.state_update?.chosen_path;
-                if (stageNode === 'route' && Array.isArray(chosen) && chosen.length > 0) {
+                const hasClassifyReasoning = d.data?.state_update?.classify_reasoning;
+                if (stageNode === 'route' && Array.isArray(chosen) && chosen.length > 0 && hasClassifyReasoning) {
                   const fpTitle = titles['find_path'] || 'find_path';
                   dispatch({ type: "workflow_start_stage", messageId: fmId, node: 'find_path', title: fpTitle, status: fpTitle });
                 }

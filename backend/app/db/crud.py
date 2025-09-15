@@ -142,6 +142,25 @@ def get_message(db: Session, message_id: int) -> Optional[Message]:
     return db.query(Message).filter(Message.id == message_id).first()
 
 
+def set_message_precedent_id(db: Session, message_id: int, precedent_id: int) -> bool:
+    """Set the precedent_id for a specific message."""
+    try:
+        message = db.query(Message).filter(Message.id == message_id).first()
+        if message:
+            message.precedent_id = precedent_id
+            db.commit()
+            db.refresh(message)
+            print(f"✅ [CRUD] Successfully updated message {message_id} with precedent_id {precedent_id}")
+            return True
+        else:
+            print(f"❌ [CRUD] Message {message_id} not found")
+            return False
+    except Exception as e:
+        print(f"❌ [CRUD] Error updating message precedent_id: {e}")
+        db.rollback()
+        return False
+
+
 # State CRUD
 def create_state(db: Session, message_id: int, state_data: Dict[str, Any]) -> State:
     """Create a new state record."""

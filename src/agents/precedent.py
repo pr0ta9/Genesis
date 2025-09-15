@@ -5,6 +5,7 @@ from langchain_core.messages import BaseMessage
 from langchain_core.language_models import BaseChatModel
 from .base_agent import BaseAgent
 from ..state import State
+from ..path import WorkflowTypeEnum
 
 class PrecedentResponse(BaseModel):
     """Pydantic model for precedent analysis response."""
@@ -55,12 +56,15 @@ class Precedent(BaseAgent[PrecedentResponse]):
         else:
             print("⚠️  [PRECEDENT AGENT] No precedents to analyze")
         
-        # Invoke LLM with precedents list
+        # Preprocess precedents into compact string for prompt
+        print("🧠 [PRECEDENT AGENT] Preparing precedents for prompt...")
+        formatted_precedents = self._format_precedents_for_prompt(precedents)
+        # Invoke LLM with formatted precedents list
         print("🧠 [PRECEDENT AGENT] Invoking LLM for precedent analysis...")
         result, updated_history = self._invoke(
-            messages, 
+            messages,
             node,
-            precedents=precedents  # Pass to prompt template
+            precedents=formatted_precedents  # Compact string for the template
         )
         print(f"🧠 [PRECEDENT AGENT] LLM returned: {type(result).__name__}")
         
@@ -111,8 +115,9 @@ class Precedent(BaseAgent[PrecedentResponse]):
             
             # Classification data (normally from classify node)
             response["objective"] = precedent_data.get("objective", "")
-            response["input_type"] = precedent_data.get("input_type", "")
-            response["type_savepoint"] = precedent_data.get("type_savepoint", [])
+            # Coerce input_type and type_savepoint into WorkflowTypeEnum
+            response["input_type"] = self._coerce_workflow_type(precedent_data.get("input_type"))
+            response["type_savepoint"] = self._coerce_type_savepoints(precedent_data.get("type_savepoint", []))
             response["is_complex"] = precedent_data.get("is_complex", False)
             
             # Path data (normally from find_path node)
@@ -137,6 +142,70 @@ class Precedent(BaseAgent[PrecedentResponse]):
                 self.logger.info("No precedent match selected (index=%d, available=%d)", result.index, len(precedents))
             
         return response
+
+    def _coerce_workflow_type(self, value: Any) -> WorkflowTypeEnum:
+        """Convert various representations into WorkflowTypeEnum with safe fallbacks."""
+        if isinstance(value, WorkflowTypeEnum):
+            return value
+        # Try to parse from string label
+        try:
+            if isinstance(value, str):
+                return WorkflowTypeEnum(value.lower())
+        except Exception:
+            pass
+        # Fallback to TEXT as a safe default
+        return WorkflowTypeEnum.TEXT
+
+    def _coerce_type_savepoints(self, values: Any) -> List[WorkflowTypeEnum]:
+        """Convert a list of string/enum values into List[WorkflowTypeEnum]."""
+        result: List[WorkflowTypeEnum] = []
+        if not isinstance(values, list):
+            values = [values] if values is not None else []
+        for v in values:
+            try:
+                result.append(self._coerce_workflow_type(v))
+            except Exception:
+                continue
+        # Ensure at least one savepoint if input exists; otherwise leave empty
+        return result
+
+    def _format_precedents_for_prompt(self, precedents: List[Dict]) -> str:
+        """Build a compact, readable string with only the needed fields for the prompt.
+
+        Includes: objective, path (tool names), input_type, type_savepoint, messages.
+        """
+        if not precedents:
+            return ""
+        parts: List[str] = []
+        for i, p in enumerate(precedents):
+            objective = str(p.get("objective", "")).strip()
+            # Path: show tool names in order
+            raw_path = p.get("path") or []
+            try:
+                tool_names = [step.get("name", "?") for step in raw_path if isinstance(step, dict)]
+            except Exception:
+                tool_names = []
+            path_str = " -> ".join(tool_names) if tool_names else "(no path)"
+            input_type = str(p.get("input_type", "")).lower()
+            type_savepoint = p.get("type_savepoint", []) or []
+            try:
+                tsp_str = " -> ".join([str(t).lower() for t in type_savepoint]) if type_savepoint else ""
+            except Exception:
+                tsp_str = ""
+            messages = str(p.get("messages", ""))
+            # Keep messages concise
+            max_len = 400
+            if len(messages) > max_len:
+                messages = messages[:max_len] + "..."
+            parts.append(
+                f"Precedent {i}:\n"
+                f"- objective: {objective}\n"
+                f"- path: {path_str}\n"
+                f"- input_type: {input_type}\n"
+                f"- type_savepoint: {tsp_str}\n"
+                f"- messages: {messages}"
+            )
+        return "\n\n".join(parts)
     
     def _get_next_step(self, result: PrecedentResponse, precedents_count: int) -> str:
         """Determine next step based on precedent analysis result."""

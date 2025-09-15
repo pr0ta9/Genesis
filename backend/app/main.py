@@ -30,25 +30,14 @@ async def lifespan(app: FastAPI):
     from app.services.orchestrator_service import get_orchestrator
     from app.db.precedent import initialize_global_clients
     
-    # Initialize TiDB client and orchestrator once globally
-    try:
-        # This will create and validate the global TiDB client
-        initialize_global_clients()
-        print("✅ TiDB client initialized globally for precedent search")
-        
-        # Initialize orchestrator singleton 
-        orchestrator = get_orchestrator()
-        print("✅ Orchestrator initialized globally")
-        
-    except Exception as e:
-        print(f"⚠️  Warning: Global initialization failed - some features may be unavailable: {e}")
-        # Still try to initialize orchestrator without TiDB
-        try:
-            orchestrator = get_orchestrator()
-            print("✅ Orchestrator initialized (without TiDB)")
-        except Exception as orch_error:
-            print(f"❌ Critical: Orchestrator initialization failed: {orch_error}")
-            # Don't fail startup completely, but log critical error
+    # Initialize TiDB client and orchestrator once globally (no fallbacks)
+    # This will create and validate the global TiDB client
+    initialize_global_clients()
+    print("✅ TiDB client initialized globally for precedent search")
+    
+    # Initialize orchestrator singleton 
+    orchestrator = get_orchestrator()
+    print("✅ Orchestrator initialized globally")
     
     yield
     

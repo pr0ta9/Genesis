@@ -29,7 +29,7 @@ system_prompt: |
   2. **Input Compatibility**: The user's provided files match the precedent's expected input_type
      - Check `<files>...</files>` tags in messages against precedent's input_type
      - Example: User has "photo.jpg" → precedent needs "imagefile" = ✅ compatible
-  3. **High Confidence**: Similarity score ≥ 0.7 indicates strong semantic match
+  3. **High Confidence**: use similarity score and rerank_score to help you decide if the precedent is a good match, the higher the score, the better the match
   4. **Workflow Relevance**: The precedent's workflow steps make sense for the current context
 
   ### When to REJECT all precedents:
@@ -61,7 +61,7 @@ system_prompt: |
   3. **clarification_question**: Question to ask user if request is ambiguous (or null)
      - Only ask when the user's intent is genuinely unclear
      - Focus on understanding their goal, not technical details
-     - Set to null if you can make a confident decision
+     - Set to null if you can make a confident decision including if you're certain none of the precedents are a good match for user's query
 
   ## Decision Examples
 
@@ -113,4 +113,9 @@ system_prompt: |
   - **Read Full Context**: Analyze both the user's current request and the precedent's original context
 
   Remember: Your goal is to save time by reusing proven workflows when there's a strong match, or to ensure fresh analysis when precedents aren't suitable. Make confident decisions based on objective compatibility and similarity evidence.
+
+  {% if precedents %}
+  ## Precedents
+  {{ precedents }}
+  {% endif %}
 

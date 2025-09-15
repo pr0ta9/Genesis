@@ -50,6 +50,9 @@ class Message(Base):
     reasoning = Column(JSON, nullable=True)  # Store reasoning data with thinking_time, content, etc.
     state_id = Column(String, ForeignKey("states.uid"), nullable=True)  # Links to state if exists
     timestamp = Column(DateTime(timezone=True), server_default=func.now())
+    # Precedent linkage (if this assistant message was saved as a precedent)
+    # Note: precedent_id references records in TiDB, not SQLite, so no foreign key constraint
+    precedent_id = Column(Integer, nullable=True)
     
     # Relationships
     conversation = relationship("Conversation", back_populates="messages")
@@ -66,7 +69,8 @@ class Message(Base):
             "reasoning": self.reasoning,  # Include reasoning data
             "state_id": self.state_id,
             "timestamp": self.timestamp.isoformat() if self.timestamp else None,
-            "has_state": self.state is not None
+            "has_state": self.state is not None,
+            "precedent_id": self.precedent_id
         }
 
 
@@ -88,6 +92,11 @@ class State(Base):
     is_complex = Column(Boolean, nullable=True)
     classify_reasoning = Column(Text, nullable=True)
     classify_clarification = Column(Text, nullable=True)
+    
+    # Precedent node results
+    precedents_found = Column(JSON, nullable=True)  # List of precedents (with objective names)
+    precedent_reasoning = Column(Text, nullable=True)
+    precedent_clarification = Column(Text, nullable=True)
     
     # Path node results
     tool_metadata = Column(JSON, nullable=True)  # List of tool metadata
@@ -160,6 +169,11 @@ class State(Base):
                 "is_complex": self.is_complex,
                 "classify_reasoning": self.classify_reasoning,
                 "classify_clarification": self.classify_clarification,
+                
+                # Precedent
+                "precedents_found": self.precedents_found,
+                "precedent_reasoning": self.precedent_reasoning,
+                "precedent_clarification": self.precedent_clarification,
                 
                 # Path - serialize to ensure JSON compatibility
                 "tool_metadata": serialize_path_data(self.tool_metadata),
