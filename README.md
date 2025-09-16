@@ -164,6 +164,37 @@ Genesis provides these AI-powered tools:
 - **Image Cleanup**: Image → OCR → Remove Text → Save Clean Image
 - **Audio Enhancement**: Audio → Denoise → Download Clean Audio
 
+## How Genesis Works: Data Flow & Integrations
+
+Genesis operates through a sophisticated orchestration system that intelligently processes your files and learns from your workflows:
+
+### 🔄 **Core Data Flow**
+
+```mermaid
+graph TD
+    UserUpload --> PrecedentAgent
+    PrecedentAgent --> ClassifierAgent
+    ClassifierAgent --> PathGenerator
+    PathGenerator --> RouterAgent
+    RouterAgent --> ExecutionEngine
+    ExecutionEngine --> FinalizerAgent
+    FinalizerAgent --> PrecedentStorage
+    
+    PrecedentAgent -.-> TiDB
+    PrecedentStorage -.-> TiDB
+    ExecutionEngine -.-> FileSystem
+    FinalizerAgent -.-> SQLite
+```
+
+**Step-by-Step Process:**
+1. **Input Analysis** → Upload files (images, audio, PDFs) via web or CLI
+2. **Precedent Lookup** → Search TiDB vector database for similar past workflows  
+3. **Smart Classification** → AI analyzes content type and processing requirements
+4. **Path Planning** → Generate optimal tool combinations based on input/output types
+5. **Intelligent Routing** → Select best workflow path with learned preferences
+6. **Execution** → Run processing tools (OCR, translation, audio processing, etc.)
+7. **Result Assembly** → Format outputs and save to organized file structure
+8. **Learning** → Store successful workflow as precedent for future optimization
 ## Troubleshooting
 
 ### Genesis Won't Start
