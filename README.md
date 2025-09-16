@@ -14,6 +14,8 @@ A sophisticated multimodal AI assistant with LangGraph orchestration, TiDB vecto
 
 ## Quick Start Guide
 
+[**🎬 Watch the Genesis Demo →**](https://youtu.be/QuVkBdZfHNc)
+
 ### Step 1: Install Prerequisites
 
 #### Required Software
