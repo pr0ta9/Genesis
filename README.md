@@ -74,7 +74,7 @@ GENESIS_DEV_MODE=0
 # Get your free API key from https://jina.ai/ (no registration required)
 JINA_AI_API_KEY=your_jina_api_key
 
-# === Database Configuration (Optional but Recommended) ===
+# === Database Configuration (Required for precedent) ===
 # Sign up at https://tidbcloud.com/ for free tier
 # TIDB_HOST=your-cluster.cluster.tidbcloud.com
 # TIDB_PORT=4000
