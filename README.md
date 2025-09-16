@@ -186,56 +186,6 @@ graph TD
     FinalizerAgent -.-> SQLite
 ```
 
-### **Full Data Flow**
-
-```mermaid
-graph TD
-    Start([User Input]) --> Precedent[Precedent Agent]
-    
-    Precedent --> PrecedentDecision{Precedents Found?}
-    PrecedentDecision -->|Yes, Analyze| Classify[Classifier Agent]
-    PrecedentDecision -->|No Precedents| Classify
-    PrecedentDecision -->|Need Clarification| Feedback[Waiting for Feedback]
-    
-    Classify --> ClassifyDecision{Classification Clear?}
-    ClassifyDecision -->|Yes| FindPath[Path Generator]
-    ClassifyDecision -->|Need Clarification| Feedback
-    
-    FindPath --> Route[Router Agent]
-    
-    Route --> RouteDecision{Path Selection Clear?}
-    RouteDecision -->|Yes| Execute[Execution Engine]
-    RouteDecision -->|Need Clarification| Feedback
-    
-    Execute --> Finalize[Finalizer Agent]
-    
-    Finalize --> FinalizeDecision{Complete?}
-    FinalizeDecision -->|Yes| End([End])
-    FinalizeDecision -->|Need More Work| Classify
-    
-    Feedback --> FeedbackReturn{Return to Which Node?}
-    FeedbackReturn -->|Precedent Issue| Precedent
-    FeedbackReturn -->|Classification Issue| Classify  
-    FeedbackReturn -->|Routing Issue| Route
-    
-    %% External Systems
-    Precedent -.->|Search Similar| TiDB[(TiDB Database)]
-    Finalize -.->|Store Results| TiDB
-    Execute -.->|File Operations| FileSystem[(File System)]
-    Execute -.->|Tool Registry| ToolRegistry[(Tool Registry)]
-    
-    %% Styling
-    classDef agent fill:#e1f5fe
-    classDef decision fill:#fff3e0
-    classDef external fill:#f3e5f5
-    classDef endpoint fill:#e8f5e8
-    
-    class Precedent,Classify,FindPath,Route,Execute,Finalize agent
-    class PrecedentDecision,ClassifyDecision,RouteDecision,FinalizeDecision,FeedbackReturn decision
-    class TiDB,FileSystem,ToolRegistry external
-    class Start,End,Feedback endpoint
-```
-
 **Step-by-Step Process:**
 1. **Input Analysis** → Upload files (images, audio, PDFs) via web or CLI
 2. **Precedent Lookup** → Search TiDB vector database for similar past workflows  
