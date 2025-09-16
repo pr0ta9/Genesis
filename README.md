@@ -1,14 +1,15 @@
 # Genesis AI Assistant
 
-A sophisticated multimodal AI assistant with LangGraph orchestration, supporting images, audio, documents, and video processing using OpenAI's gpt-oss models.
+A sophisticated multimodal AI assistant with LangGraph orchestration, TiDB vector storage, and smart precedent learning. Genesis processes images, audio, documents, and more using locally-hosted OpenAI gpt-oss models through Ollama.
 
 ## What Genesis Can Do
 
-- **AI-Powered Image Processing**: Intelligent image manipulation, OCR, text removal, and inpainting
-- **Audio Processing**: Advanced noise suppression and audio enhancement
-- **Document Processing**: OCR, translation, and text extraction from images and PDFs
-- **Web Search**: Integrated web search capabilities
-- **Real-time Processing**: WebSocket support for live updates and streaming
+- **AI-Powered Document Processing**: Advanced OCR with PaddleOCR, intelligent text merging, translation, and extraction from images and PDFs
+- **Image Processing**: Text removal, inpainting with custom fonts, and intelligent image manipulation
+- **Audio Processing**: Noise reduction and audio enhancement using advanced algorithms  
+- **Smart Workflow Learning**: TiDB-powered precedent system that learns from your processing patterns
+- **Web Search Integration**: Built-in web search capabilities for enhanced AI responses
+- **Real-time Processing**: WebSocket support for live updates and streaming execution
 - **Full-Stack Architecture**: Python backend with FastAPI, Next.js frontend with React and TypeScript
 
 ## Quick Start Guide
@@ -291,19 +292,43 @@ This project is licensed under the Apache 2.0 License. The OpenAI gpt-oss models
 
 ```
 Genesis/
-├── backend/                # FastAPI backend
-│   ├── app/               # Application code  
-│   └── requirements-docker.txt
-├── frontend/              # Next.js frontend
-│   ├── src/              # React components
+├── 🌐 Frontend (Next.js + React + TypeScript)
+│   ├── src/
+│   │   ├── app/          # Next.js 15 app router
+│   │   ├── components/   # React components (15 files)
+│   │   └── lib/          # TypeScript utilities
 │   └── Dockerfile
-├── src/                  # Core Python modules
-│   ├── agents/          # LangGraph agents
-│   ├── tools/           # AI tools and utilities
-│   └── orchestrator.py  # Main orchestrator
-├── tests/
-│   └── examples/        # Test files (test.png, test.wav)
-├── docker-compose.yml   # Main Docker configuration
-├── .env.example        # Environment template
-└── README.md
+├── 🔧 Backend (FastAPI + Python)
+│   ├── app/
+│   │   ├── api/v1/       # REST API endpoints (11 modules)
+│   │   ├── db/           # Database models & TiDB integration
+│   │   ├── models/       # Pydantic schemas
+│   │   └── services/     # Business logic layer
+│   ├── inputs/           # User file uploads (organized by conversation)
+│   ├── outputs/          # Processing results (organized by conversation)
+│   └── start.py          # Backend entry point
+├── 🧠 Core Engine (LangGraph Orchestration)
+│   ├── src/
+│   │   ├── orchestrator.py    # Main LangGraph workflow coordinator
+│   │   ├── agents/             # AI agents (precedent, classifier, router, finalizer)
+│   │   ├── path/               # Tool registry and path generation system
+│   │   ├── tools/              # Processing tools
+│   │   │   ├── path_tools/     # OCR, translation, audio, image processing
+│   │   │   └── agent_tools/    # Web search and utility tools
+│   │   ├── executor/           # Workflow execution engine
+│   │   └── streaming.py        # Real-time updates and WebSocket support
+│   └── main.py                 # CLI interface
+├── 🗄️ Data & Models
+│   ├── data/font/        # Font files for text inpainting
+│   ├── tests/examples/   # Test files (images, audio, documents)
+│   └── requirements-*.txt # Dependency specifications
+├── 🐳 Deployment
+│   ├── docker-compose.yml       # Main deployment configuration
+│   ├── docker-compose.gpu.yml   # GPU-accelerated variant
+│   ├── docker-compose.dev.yml   # Development mode
+│   └── Dockerfile               # Container definitions
+└── 📁 Workspace Management
+    ├── inputs/           # Conversation-based file organization
+    ├── outputs/          # Results organized by thread ID
+    └── .env             # Environment configuration
 ```
