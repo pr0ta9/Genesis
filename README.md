@@ -67,6 +67,10 @@ Create your environment files:
 GENESIS_KEEP_WORKSPACE=1
 GENESIS_DEV_MODE=0
 
+# === Jina AI API (Required for Reranker) ===
+# Get your free API key from https://jina.ai/ (no registration required)
+JINA_AI_API_KEY=your_jina_api_key
+
 # === Database Configuration (Optional but Recommended) ===
 # Sign up at https://tidbcloud.com/ for free tier
 # TIDB_HOST=your-cluster.cluster.tidbcloud.com
@@ -104,12 +108,21 @@ docker-compose logs -f
 # ✓ Frontend and backend ready
 ```
 
-#### Option B: GPU Mode (Experimental - Advanced Users Only)
-⚠️ **Warning**: GPU mode is experimental and may have compatibility issues.
+#### Option B: GPU Mode (CUDA 12.8 Only - Experimental)
+⚠️ **Warning**: GPU mode is experimental and only supports CUDA 12.8. May have compatibility issues with other CUDA versions.
+
+**Requirements:**
+- NVIDIA GPU with 12GB+ VRAM
+- CUDA 12.8 compatible drivers
+- NVIDIA Docker runtime installed
 
 ```bash
-# Only use if you have NVIDIA GPU with 12GB+ VRAM
+
+# If the test passes, start Genesis with GPU support
 docker-compose -f docker-compose.yml -f docker-compose.gpu.yml up -d
+
+# Monitor logs for GPU initialization
+docker-compose -f docker-compose.yml -f docker-compose.gpu.yml logs -f backend
 ```
 
 ### Step 6: Access Genesis
@@ -215,6 +228,7 @@ Genesis can store processing history and learn from your workflows:
 
 Enhance Genesis with additional services:
 
+- **Jina AI**: Enhanced AI processing capabilities (get free key from [jina.ai](https://jina.ai/) - no registration required)
 - **Google Gemini**: Alternative AI model for certain tasks
 - **Brave Search**: Enhanced web search capabilities  
 - **Serper**: Google search integration
@@ -248,8 +262,9 @@ docker-compose -f docker-compose.yml -f docker-compose.dev.yml up -d
 
 ### GPU Requirements (Optional, Experimental)
 - **GPU**: NVIDIA RTX 40/50 series with 12GB+ VRAM
-- **CUDA**: 12.8+ compatible drivers
+- **CUDA**: Exactly CUDA 12.8 compatible drivers (other versions not supported)
 - **RAM**: 24GB+ system RAM
+- **Docker**: NVIDIA Docker runtime installed
 
 ## Support & Contributing
 
