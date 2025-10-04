@@ -1,139 +1,312 @@
-# Genesis To-do List
-
-## Agents
-**1.** Set up baseAgent class `🔥 Critical` ✅
-- **1.1** Set up __init__ ✅
-- **1.2** Set up prompt loading ✅
-- **1.3** Set up invoke `⚡ High` *depends on: 5.2* ✅
-- **1.4** Create abstract method ✅
-
-**2.** Set up Classifier Agent `⚡ High` ✅
-- **2.1** Set up ClassificationResponse model `⚡ High` ✅
-- **2.2** Set up Classifier.yaml prompt template `⚡ High` *depends on: 5.2* ✅
-- **2.3** Set up __init__ ✅
-- **2.4** Set up classify method `⚡ High` *depends on: 2.1, 2.2, 5.2* ✅
-- **2.5** Set up get_next_step `📋 Medium` *depends on: 2.4* ✅
-
-**3.** Set up Router Agent `⚡ High` ✅
-- **3.1** Set up RoutingResponse model `⚡ High` ✅
-- **3.2** Set up Router.yaml prompt template `⚡ High` *depends on: 4.0* ✅
-- **3.3** Set up __init__ ✅
-- **3.4** Set up route method `⚡ High` *depends on: 3.1, 3.2, 4.0* ✅
-- **3.5** Set up get_next_step `📋 Medium` *depends on: 3.4* ✅
-
-**4.** Set up Finalizer Agent `⚡ High` ✅
-- **4.1** Set up FinalizationResponse model `⚡ High` ✅
-- **4.2** Set up Finalizor.yaml prompt template `⚡ High` *depends on: 6.0* ✅
-- **4.3** Set up __init__ ✅
-- **4.4** Set up finalize method `⚡ High` *depends on: 4.1, 4.2, 5.2* ✅
-- **4.5** Set up get_next_step `📋 Medium` *depends on: 4.4* ✅
-
-## Path
-**5.** Set up Path System (Type-based routing and path discovery) `🔥 Critical` ✅
-- **5.1** Set up decorators.py - @tool decorator for input/output type declaration `🔥 Critical` ✅
-    - **5.1.1** Fix @tool decorator to some other name `🔥 Critical` ✅
-- **5.2** Set up metadata.py - WorkflowType, FileType system, ToolMetadata `🔥 Critical` *depends on: 5.1* ✅
-    - **5.2.1** Finalize TypeClass `🔥 Critical` ✅
-- **5.3** Set up registry.py - Tool discovery and type→tools index `🔥 Critical` *depends on: 5.2, 7.1* ✅
-    - **5.3.1** Lazy load improvement `🔥 Critical` ✅
-- **5.4** Set up generator.py - DFS path planning with type compatibility `🔥 Critical` *depends on: 5.3, 7.1* ✅
-    - **5.4.1** New path algorithm implementation(deduplication + contribution system) `🔥 Critical` ✅
-
-## Executor
-**6** Set up Executor System (executable path) `🔥 Critical` ✅
-- **6.1** Set up flow_state.py - StateGenerator for TypedDict schemas `🔥 Critical` *depends on: 5.0* ✅
-- **6.2** Set up conversion.py - StateGraphConverter for LangGraph compilation `🔥 Critical` ✅
-- **6.3** Set up execution.py - GraphExecutor and ExecutionOrchestrator `🔥 Critical` *depends on: 6.4* ✅
-    - **6.3.1** Torch import conflict between tools(created 6.4) `🔥 Critical` ✅
-- **6.4** Set up process_isolation.py - tmp + python file generation `🔥 Critical` *depends on: 6.2* ✅
-
-
-## Tools
-**7.** Set up Tools Infrastructure `⚡ High` ✅
-- **7.1** Set up Path Tools (Type transformation tools) `⚡ High` ✅
-  - **7.1.1** Set up base tool interface with input_type → output_type signature `🔥 Critical` *depends on: 5.2* ✅
-  - **7.1.2** Implement OCR tool (image→text) `📋 Medium` *depends on: 7.1.1* ✅
-  - **7.1.3** Implement translator tool (text→text) `📋 Medium` *depends on: 7.1.1* ✅
-  - **7.1.4** Implement erase (image->image) `📋 Medium` *depends on: 7.1.1* ✅
-  - **7.1.4** Implement audio transcriber (audio→text) `📋 Medium` *depends on: 7.1.1* ✅
-  - **7.1.5** Set up inpaint_text tools `💡 Low` *depends on: 7.1.1* ✅
-  - **7.1.6** Implement denoise tool (audio→audio) `💡 Low` *depends on: 7.1.1* ✅
-  - **7.1.7** Implement get_pdf_form_field `💡 Low` *depends on: 7.1.1* 
-  - **7.1.8** Implement fill pdf form `💡 Low` *depends on: 7.1.1*
-
-- **7.2** Set up Agent Tools (Utility tools for agent reasoning) `⚡ High`
-  - **7.2.1** Set up web search tool `⚡ High`
-  - **7.2.2** Set up calculator tool `📋 Medium`
-
-## GUI (OLD)
-**8.** Set up GUI System `💡 Low`
-- **8.1** Set up basic data structure `💡 Low` ✅
-- **8.2** Implement Components `💡 Low` *depends on: 8.1*
-- **8.3** Implement panels `💡 Low` *depends on: 8.1, 8.2*
-    - **8.3.1** Implement executor panel `💡 Low` *depends on: 8.1, 8.2*
-- **8.4** Implement views `💡 Low` *depends on: 8.1*
-    - **8.4.1** Implement executor views `💡 Low` *depends on: 8.1, 8.2, 8.3*
-    - **8.4.2** Implement path views `💡 Low` *depends on: 8.1, 8.2, 8.3*
-- **8.5** Set up orchestrator bridge to core logic `💡 Low` *depends on: 9.5*
-- **8.6** set up app.py `💡 Low` *depends on: 8.5*
-
-## Frontend (NEW)
-**8.** Set up Nextjs frontend `💡 Low`
-- **8.1** Set up environment `💡 Low` ✅
-- **8.2** Implement Components `💡 Low` *depends on: 8.1* ✅
-- **8.3** Implement panels `💡 Low` *depends on: 8.1, 8.2* ✅
-    - **8.3.1** Implement executor panel `💡 Low` *depends on: 8.1, 8.2* ✅
-- **8.4** Implement views `💡 Low` *depends on: 8.1* ✅
-    - **8.4.1** Implement executor views `💡 Low` *depends on: 8.1, 8.2, 8.3* ✅
-    - **8.4.2** Implement path views `💡 Low` *depends on: 8.1, 8.2, 8.3* ✅
-- **8.5** Set up Backend for bridging `💡 Low` *depends on: 9.5* ✅
-
-
-
-## Orchestrator
-**9.** Set up Main Orchestrator `🔥 Critical` ✅
-- **9.1** Set up agent coordination flow `🔥 Critical` *depends on: 2.0, 3.0, 4.0* ✅
-- **9.2** Set up path finding integration `🔥 Critical` *depends on: 5.0* ✅
-- **9.3** Set up execution coordination `🔥 Critical` *depends on: 6.0* ✅
-- **9.4** Set up validation pipeline `⚡ High` *depends on: 4.0* ✅
-- **9.5** Implement main pipeline controller `🔥 Critical` *depends on: 9.1, 9.2, 9.3, 9.4* ✅
-
-## Main(OLD)
-**10.** Project Foundation `🔥 Critical`
-- **10.1** Check current environment (check for venv and prepare for automated setup if missing) `🔥 Critical` *depends on: everything else* 
-- **10.2** Create requirements.txt `🔥 Critical` *depends on: 10.1* ✅
-- **10.3** Initialize project structure `🔥 Critical` *depends on: 10.1* ✅
-- **10.4** Create README.md `📋 Medium` ✅
-
-## Data Management(Future)
-**11.** Set up Data & Templates `💡 Low`
-- **11.1** Set up templates directory structure `💡 Low`
-- **11.2** Implement successful path pattern storage `💡 Low` *depends on: 5.0*
-- **11.3** Set up runtime path caching `💡 Low` *depends on: 12.2*
-- **11.4** Create cache management utilities `💡 Low` *depends on: 12.3*
-
-## Testing
-**12.** Set up Testing Infrastructure `💡 Low` ✅
-- **12.1** Set up unit test framework `💡 Low` ✅
-- **12.2** Test path generation `💡 Low` *depends on: 5.0* ✅
-- **12.3** Test execution `💡 Low` *depends on: 7.0* ✅
-- **12.4** Test agent interactions `💡 Low` *depends on: 2.0, 3.0, 4.0* ✅
-- **12.4** Set up end-to-end workflow tests `💡 Low` *depends on: 9.5* ✅
-- **12.5** Set up view tests `💡 Low` *depends on: 9.5* ✅
+# Genesis AI Assistant - Development TODO
 
 ---
 
-## 🏷️ Priority Legend
-- 🔥 **Critical** - Must complete first, blocks other work
-- ⚡ **High** - Important for core functionality
-- 📋 **Medium** - Standard features and improvements  
-- 💡 **Low** - Nice-to-have features and optimizations
+## 🐛 Bug Fixes
 
-## 🔗 Dependency Reference System
-- Use task numbers (e.g., `5.2`) to reference specific subtasks
-- Use section numbers (e.g., `5.0`) to reference completion of entire section
-- Dependencies marked as `*depends on: X.Y*` cannot start until those tasks complete
+### 1. Precedent Score Fix
+**Issue**: All precedent scores showing 0.0 instead of actual similarity scores
+
+**Location**: `src/orchestrator/core/orchestrator.py` (lines 102-115)
+
+**What to Change**: 
+- Debug Weaviate hybrid search response structure to identify correct score attribute
+- Update score extraction logic from `result.metadata.score/certainty/distance` to correct attribute
+- Add logging to verify non-zero scores are returned
 
 ---
-*Last updated: Genesis Project - Structured Dependencies*
 
+## ⚡ Optimizations
+
+### 1. Agent Prompt Optimization
+**Goal**: Reduce token usage, improve performance, eliminate repetition
+
+**Locations**:
+- `src/orchestrator/agents/prompts/Classifier.yaml` (87 lines, too verbose)
+- `src/orchestrator/agents/prompts/Router.yaml` (226+ lines, excessive detail)
+- `src/orchestrator/agents/prompts/Precedent.yaml`
+- `src/orchestrator/agents/prompts/Finalizer.yaml`
+
+**What to Change**:
+- Extract common data type definitions into shared template
+- Remove redundant examples and verbose explanations
+- Condense file reference system documentation in Router.yaml
+- Eliminate repetitive reasoning instructions across all prompts
+
+---
+
+### 2. LLM Parameter Tuning
+**Goal**: Optimize temperature, context window, and model parameters per agent type
+
+**Locations**:
+- `src/orchestrator/agents/llm.py` (lines 5-23)
+- `src/orchestrator/core/orchestrator.py` (line 33)
+
+**What to Change**:
+- Test and set optimal temperature per agent: Classifier/Precedent (0.0-0.2), Router (0.3-0.5), Finalizer (0.5-0.8)
+- Evaluate num_ctx values (test 8192, 16384, 32768) for performance vs accuracy
+- Test repeat_penalty values (current 1.5, test 1.0-2.0 range)
+- Add configurable parameters to orchestrator initialization
+- Create configuration file for easy tuning without code changes
+
+---
+
+### 3. Multi-Path Execution Optimization (is_partial)
+**Goal**: Improve workflow efficiency when parameters are incomplete
+
+**Locations**:
+- `src/orchestrator/agents/router.py` (lines 274-297, 312-313)
+- `src/orchestrator/executor/executor.py`
+- `src/orchestrator/core/state.py`
+
+**What to Change**:
+- Add execution state caching to avoid re-routing from scratch
+- Implement automatic parameter inference from previous step outputs
+- Add "resume" capability without full path regeneration
+- Store partial execution context persistently in state
+- Add smart parameter suggestion based on execution history
+
+---
+
+### 4. Frontend Layout Optimization
+**Goal**: Improve UI responsiveness and user experience
+
+**Locations**:
+- `gui/lib/layout.dart` (main layout with sidebar and panels)
+- `gui/lib/widgets/chat_panel.dart`
+- `gui/lib/widgets/execution_panel.dart`
+- `gui/lib/widgets/chat/sidebar.dart`
+
+**What to Change**:
+- Improve responsive design for different screen sizes
+- Add keyboard shortcuts for panel toggling
+- Persist panel states across sessions using SharedPreferences
+- Implement dark mode support
+- Add smoother animation transitions for panel operations
+
+---
+
+### 5. StructuredData Type Hierarchy
+**Goal**: Create specialized data type classes for better path routing
+
+**Location**: `src/orchestrator/path/metadata.py` (lines 110-131)
+
+**What to Change**:
+- Make StructuredData a parent class with subclasses:
+  - `TableData` - CSV, Excel sheets, database results
+  - `JsonData` - Generic JSON/dictionary data
+  - `TreeData` - XML, YAML, nested JSON
+  - `GraphData` - Network/graph structures
+  - `TimeSeriesData` - Time-indexed data
+  - `FormData` - Form/survey responses
+- Add validation methods per subclass
+- Update `src/orchestrator/agents/prompts/Classifier.yaml` with new type definitions
+
+---
+
+### 6. Agents' Web Search Ability
+**Goal**: Improve agents' capability to use web search tools effectively
+
+**Locations**:
+- `src/orchestrator/tools/agent_tools/web_search.py` (current implementation)
+- `src/orchestrator/agents/llm.py` (line 34, tool binding)
+- `src/orchestrator/agents/base_agent.py` (agent invocation logic)
+
+**What to Change**:
+- Enhance web search tool with better query formulation
+- Add search result parsing and summarization
+- Improve tool calling logic for agents to know when to use search
+- Add search result caching to avoid redundant queries
+- Update agent prompts to better leverage search capabilities
+
+---
+
+### 7. Self-Assessment Agent
+**Goal**: Add agent or optimize finalizer to evaluate if workflow successfully completed user's request
+
+**Locations**:
+- Create `src/orchestrator/agents/assessor.py` (new agent)
+- Create `src/orchestrator/agents/prompts/Assessor.yaml` (prompt template)
+- Modify `src/orchestrator/core/orchestrator.py` (add assessment node after finalizer)
+- Modify `src/orchestrator/core/state.py` (add assessment fields)
+
+**What to Add**:
+- New assessment agent that reviews execution results against original user request
+- Compare user objective with actual outputs produced
+- Check if execution errors occurred that prevented completion
+- Verify output files exist and match expected types
+- Return assessment score (0-100), success boolean, and reasoning
+- Trigger retry or clarification if assessment score is low (<70)
+- Update state with assessment results for precedent learning
+
+---
+
+## ✨ New Features
+
+### 1. Add More Processing Tools
+**Goal**: Expand tool ecosystem for richer workflows
+
+**Location**: Create new files in `src/orchestrator/tools/path_tools/`
+
+**What to Add**:
+- Image tools: resize/compress, style transfer, captioning, QR code generation
+- Audio tools: format conversion, splitting/merging, speech-to-text
+- Document tools: PDF generation, DOCX/XLSX parsing
+- Video tools: frame extraction
+- Each tool needs `@genesis_tool` decorator with proper WorkflowType input/output definitions
+
+---
+
+### 2. Frontend Settings Page
+**Goal**: Create comprehensive settings UI for configuration
+
+**Location**: Create new files:
+- `gui/lib/widgets/settings_page.dart` (main settings UI)
+- `gui/lib/data/services/settings_service.dart` (persistence layer)
+
+**What to Add**:
+- Connection settings: API URL, timeout, retry behavior
+- Appearance: theme selection (light/dark), font size, UI density
+- Behavior: auto-scroll, notifications, file size limits
+- Advanced: debug logging, cache management, export/import settings
+- Use SharedPreferences for persistence
+- Add settings button to sidebar in `gui/lib/widgets/chat/sidebar.dart`
+
+---
+
+### 3. Model Selection API & GUI
+**Goal**: Allow users to select and switch LLM models
+
+**Backend Location**: Create/enhance:
+- `src/api/model.py` (add list and switch endpoints)
+- Add `GET /api/v1/models` - list available Ollama models
+- Add `POST /api/v1/models/select` - switch active model
+
+**Frontend Location**: Create:
+- `gui/lib/widgets/model_selector.dart` (selection widget)
+- `gui/lib/data/services/model_service.dart` (API client)
+
+**What to Add**:
+- Model dropdown showing available models with capabilities
+- Current active model indicator
+- Model switching with loading state and error handling
+- Integration with settings page or chat panel
+
+---
+
+### 4. Precedent Management UI
+**Goal**: Interface for viewing, searching, and managing saved workflows
+
+**Backend Location**: Create endpoints in `src/api/precedent.py`:
+- `GET /api/v1/precedents` - list all precedents
+- `GET /api/v1/precedents/{id}` - get details
+- `DELETE /api/v1/precedents/{id}` - delete precedent
+- `PUT /api/v1/precedents/{id}` - update metadata
+- `GET /api/v1/precedents/stats` - usage analytics
+
+**Frontend Location**: Create:
+- `gui/lib/widgets/precedent_panel.dart` (main management UI)
+- `gui/lib/widgets/precedent_list_item.dart` (list view)
+- `gui/lib/widgets/precedent_detail_view.dart` (detail page)
+
+**What to Add**:
+- List view with search/filter/sort functionality
+- Detail view showing workflow path, objective, types, creation date
+- Delete with confirmation dialog
+- Analytics dashboard showing usage statistics
+- Export/import functionality
+
+---
+
+### 5. Agent Tool for Coding
+**Goal**: Enable agents to write code to solve tasks dynamically
+
+**Location**: Create new file `src/orchestrator/tools/agent_tools/code_generator.py`
+
+**What to Add**:
+- Agent tool that takes task description and generates Python/JavaScript/etc code
+- Integration with LLM for code generation based on requirements
+- Code validation and syntax checking before returning
+- Support for multiple programming languages
+- Return generated code as Text or TextFile type
+- Add to tool registry for use in workflows
+
+---
+
+### 6. Agent Tool for Create Path Tool
+**Goal**: Enable agents to dynamically create new path tools based on requirements
+
+**Location**: Create new file `src/orchestrator/tools/agent_tools/tool_creator.py`
+
+**What to Add**:
+- Agent tool that generates new @genesis_tool decorated functions
+- Takes tool specification (name, input/output types, description, parameters)
+- Generates proper Python code with metadata and function implementation
+- Validates generated tool code and registers it dynamically
+- Saves generated tool to `src/orchestrator/tools/path_tools/generated/`
+- Adds tool to registry without requiring restart
+
+---
+
+### 7. Agent Tool for Code Execution
+**Goal**: Execute agent-generated code in isolated environment
+
+**Location**: Create new file `src/orchestrator/tools/agent_tools/code_executor.py`
+
+**What to Add**:
+- Similar to current executor in `src/orchestrator/executor/process_isolation.py`
+- Takes code string (Python/JavaScript/etc) and executes it in tmp directory
+- Write code to temporary file in `tmp/` directory
+- Execute in isolated subprocess with timeout and resource limits
+- Capture stdout, stderr, and return value
+- Clean up temporary files after execution
+- Support for different languages (Python, JavaScript, shell scripts)
+- Return execution results with success/error status
+
+---
+
+### 8. App Packaging & 1-Click Setup
+**Goal**: Make Genesis accessible to non-developers with easy installation
+
+**Location**: Create new directories and files:
+- `installers/windows/setup.bat` - Windows installer script
+- `installers/windows/genesis-installer.nsi` - NSIS installer config
+- `installers/macos/setup.sh` - macOS setup script
+- `installers/linux/genesis.appimage.yml` - AppImage config
+- `scripts/build-all-platforms.sh` - Build automation
+
+**What to Create**:
+
+**Windows**:
+- Installer bundling Flutter executable, Docker Desktop, Ollama
+- Portable ZIP version with batch scripts
+- Auto-update mechanism
+
+**macOS**:
+- .dmg installer with .app bundle
+- Homebrew formula for package managers
+
+**Linux**:
+- AppImage (universal), Flatpak, Snap packages
+- .deb and .rpm packages for distributions
+
+**Setup Scripts**:
+- Unified setup with automatic dependency detection
+- Guided installation with progress indicators
+- Automatic model download and configuration
+- First-run wizard
+- System tray icon for service management
+
+---
+
+## 📊 Summary
+
+- **Bug Fixes**: 1 item
+- **Optimizations**: 7 items  
+- **New Features**: 8 items
+
+**Total**: 16 tasks
+
+---
+
+**Last Updated**: 2025-10-04

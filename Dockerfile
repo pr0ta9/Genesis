@@ -58,7 +58,7 @@ RUN pip install --no-cache-dir -r requirements-cpu.txt
 COPY . .
 
 # Set Python path
-ENV PYTHONPATH="/app:/app/src:/app/backend"
+ENV PYTHONPATH="/app:/app/src"
 
 # Create directories for data persistence
 RUN mkdir -p /app/data /app/tmp /app/inputs /app/outputs
@@ -71,4 +71,4 @@ HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
     CMD curl -f http://localhost:8000/health || exit 1
 
 # Default command (can be overridden)
-CMD ["python", "-m", "uvicorn", "backend.app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["python", "-m", "uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "8000"]

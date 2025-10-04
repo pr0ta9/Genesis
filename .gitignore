@@ -118,7 +118,7 @@ ehthumbs.db
 Thumbs.db
 
 # test cache files
-tmp/
+/tmp/
 *.jpg
 *.jpeg
 *.gif
@@ -133,13 +133,7 @@ image_to_image_paths.txt
 /.staging_uploads/
 /inputs/
 /outputs/
-
-# Backend data directories (keep local)
-backend/inputs/
-backend/outputs/
-backend/data/
-backend/tmp/
-backend/db/
+/tests/
 
 # Audio/Media (keep local)
 *.md

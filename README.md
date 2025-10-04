@@ -1,16 +1,17 @@
 # Genesis AI Assistant
 
-A sophisticated multimodal AI assistant with LangGraph orchestration, TiDB vector storage, and smart precedent learning. Genesis processes images, audio, documents, and more using locally-hosted OpenAI gpt-oss models through Ollama.
+A sophisticated multimodal AI assistant with LangGraph orchestration, Weaviate vector storage, and smart precedent learning. Genesis processes images, audio, documents, and more using locally-hosted OpenAI gpt-oss models through Ollama.
 
 ## What Genesis Can Do
 
 - **AI-Powered Document Processing**: Advanced OCR with PaddleOCR, intelligent text merging, translation, and extraction from images and PDFs
 - **Image Processing**: Text removal, inpainting with custom fonts, and intelligent image manipulation
 - **Audio Processing**: Noise reduction and audio enhancement using advanced algorithms  
-- **Smart Workflow Learning**: TiDB-powered precedent system that learns from your processing patterns
+- **Smart Workflow Learning**: Weaviate-powered precedent system that learns from your processing patterns
 - **Web Search Integration**: Built-in web search capabilities for enhanced AI responses
 - **Real-time Processing**: WebSocket support for live updates and streaming execution
-- **Full-Stack Architecture**: Python backend with FastAPI, Next.js frontend with React and TypeScript
+- **Cross-Platform GUI**: Flutter-based interface supporting Windows, macOS, Linux, Web, iOS, and Android
+- **Full-Stack Architecture**: Python backend with FastAPI, Flutter frontend with Dart
 
 ## Quick Start Guide
 
@@ -21,11 +22,12 @@ A sophisticated multimodal AI assistant with LangGraph orchestration, TiDB vecto
 #### Required Software
 1. **[Ollama](https://ollama.com/download)** - Download and install for your operating system
 2. **[Docker Desktop](https://www.docker.com/products/docker-desktop/)** - Install Docker and Docker Compose
-3. **[Git](https://git-scm.com/downloads)** - For cloning the repository
+3. **[Flutter SDK](https://flutter.dev/docs/get-started/install)** - Required for running the GUI
+4. **[Git](https://git-scm.com/downloads)** - For cloning the repository
 
 #### Optional (for local development)
-- Python 3.12+
-- Node.js 20+
+- Python 3.12+ (for backend development)
+- Visual Studio Code or Android Studio (for Flutter development)
 
 ### Step 2: Clone and Setup Project
 
@@ -70,17 +72,9 @@ Create your environment files:
 GENESIS_KEEP_WORKSPACE=1
 GENESIS_DEV_MODE=0
 
-# === Jina AI API (Required for Reranker) ===
+# === Jina AI API (Optional - for enhanced reranking) ===
 # Get your free API key from https://jina.ai/ (no registration required)
-JINA_AI_API_KEY=your_jina_api_key
-
-# === Database Configuration (Required for precedent) ===
-# Sign up at https://tidbcloud.com/ for free tier
-# TIDB_HOST=your-cluster.cluster.tidbcloud.com
-# TIDB_PORT=4000
-# TIDB_USERNAME=your_username  
-# TIDB_PASSWORD=your_password
-# TIDB_DATABASE=precedent_db
+# JINA_AI_API_KEY=your_jina_api_key
 
 # === Optional API Keys (for enhanced functionality) ===
 # GOOGLE_API_KEY=your_google_api_key
@@ -88,10 +82,8 @@ JINA_AI_API_KEY=your_jina_api_key
 # SERPER_API_KEY=your_google_serper_api_key
 ```
 
-#### Create `frontend/.env.local`:
-```env
-NEXT_PUBLIC_API_BASE=http://localhost:8000
-```
+#### Configure Flutter GUI:
+The Flutter GUI is pre-configured to connect to `http://localhost:8000`. No additional configuration needed for local development.
 
 ### Step 5: Start Genesis
 
@@ -128,20 +120,46 @@ docker-compose -f docker-compose.yml -f docker-compose.gpu.yml up -d
 docker-compose -f docker-compose.yml -f docker-compose.gpu.yml logs -f backend
 ```
 
-### Step 6: Access Genesis
+### Step 6: Build and Run Flutter GUI
 
-Once everything is running:
+The Flutter GUI needs to be built and run separately:
 
-- **🌟 Genesis App**: http://localhost:3000
+```bash
+# Navigate to the gui directory
+cd gui
+
+# Get Flutter dependencies
+flutter pub get
+
+# Run the app (choose your platform)
+flutter run -d windows    # For Windows
+flutter run -d macos      # For macOS
+flutter run -d linux      # For Linux
+flutter run -d chrome     # For Web browser
+
+# Or build release version
+flutter build windows
+flutter build macos
+flutter build linux
+flutter build web
+```
+
+### Step 7: Access Genesis
+
+Once backend is running and Flutter GUI is launched:
+
+- **🌟 Genesis GUI**: Runs as native desktop/mobile/web app
 - **📚 API Documentation**: http://localhost:8000/docs
 - **🔧 Backend API**: http://localhost:8000
+- **🗄️ Weaviate Console**: http://localhost:8080/v1
 
-### Step 7: Test Your Setup
+### Step 8: Test Your Setup
 
-1. **Upload a Test Image**: Use `tests/examples/test.png`
-2. **Try OCR**: Extract text from the image
-3. **Test Audio**: Upload `tests/examples/test.wav` and try denoising
-4. **Experiment**: Try different combinations of tools
+1. **Launch the Flutter GUI** and create a new chat
+2. **Upload a Test Image**: Use `tests/examples/test.png`
+3. **Try OCR**: Ask Genesis to extract text from the image
+4. **Test Audio**: Upload `tests/examples/test.wav` and try denoising
+5. **Experiment**: Try different combinations of tools and watch real-time execution in the UI
 
 ## Available Tools
 
@@ -172,7 +190,7 @@ Genesis operates through a sophisticated orchestration system that intelligently
 
 ```mermaid
 graph TD
-    UserUpload --> PrecedentAgent
+    UserUpload[Flutter GUI Upload] --> PrecedentAgent
     PrecedentAgent --> ClassifierAgent
     ClassifierAgent --> PathGenerator
     PathGenerator --> RouterAgent
@@ -180,21 +198,22 @@ graph TD
     ExecutionEngine --> FinalizerAgent
     FinalizerAgent --> PrecedentStorage
     
-    PrecedentAgent -.-> TiDB
-    PrecedentStorage -.-> TiDB
+    PrecedentAgent -.-> Weaviate
+    PrecedentStorage -.-> Weaviate
     ExecutionEngine -.-> FileSystem
-    FinalizerAgent -.-> SQLite
+    FinalizerAgent -.-> PostgreSQL
 ```
 
 **Step-by-Step Process:**
-1. **Input Analysis** → Upload files (images, audio, PDFs) via web or CLI
-2. **Precedent Lookup** → Search TiDB vector database for similar past workflows  
+1. **Input Analysis** → Upload files (images, audio, PDFs) via Flutter GUI
+2. **Precedent Lookup** → Search Weaviate vector database for similar past workflows  
 3. **Smart Classification** → AI analyzes content type and processing requirements
 4. **Path Planning** → Generate optimal tool combinations based on input/output types
 5. **Intelligent Routing** → Select best workflow path with learned preferences
 6. **Execution** → Run processing tools (OCR, translation, audio processing, etc.)
-7. **Result Assembly** → Format outputs and save to organized file structure
-8. **Learning** → Store successful workflow as precedent for future optimization
+7. **Real-time Updates** → Stream execution progress back to Flutter GUI via WebSocket
+8. **Result Assembly** → Format outputs and save to organized file structure
+9. **Learning** → Store successful workflow as precedent for future optimization
 ## Troubleshooting
 
 ### Genesis Won't Start
@@ -211,10 +230,16 @@ ollama serve
 ollama list | grep gpt-oss
 ```
 
-**Problem**: "Frontend can't connect to backend"
+**Problem**: "Flutter GUI can't connect to backend"
 ```bash
 # Check if backend is running
 docker-compose logs backend
+
+# Verify backend is accessible
+curl http://localhost:8000/health
+
+# Check Flutter config (should point to http://localhost:8000)
+# Edit gui/lib/core/config.dart if needed
 
 # Restart services
 docker-compose restart
@@ -240,6 +265,35 @@ docker-compose logs
 - PaddleOCR models download on first OCR/translation use
 - Subsequent runs will be much faster
 
+### Flutter GUI Issues
+
+**Problem**: "Flutter not found"
+```bash
+# Verify Flutter installation
+flutter doctor
+
+# If issues found, follow Flutter's setup guide
+flutter doctor -v
+```
+
+**Problem**: "Dependencies failed to resolve"
+```bash
+cd gui
+flutter clean
+flutter pub get
+```
+
+**Problem**: "Platform not available"
+```bash
+# Check available devices
+flutter devices
+
+# Enable desktop support if needed
+flutter config --enable-windows-desktop
+flutter config --enable-macos-desktop
+flutter config --enable-linux-desktop
+```
+
 ### Getting Help
 
 1. **Check logs**: `docker-compose logs -f`
@@ -249,20 +303,20 @@ docker-compose logs
 
 ## Advanced Configuration
 
-### Database Setup (Optional but Recommended)
+### Vector Database (Weaviate)
 
-Genesis can store processing history and learn from your workflows:
+Genesis uses Weaviate for vector storage and precedent learning:
 
-1. **Sign up**: Create free account at [TiDB Cloud](https://tidbcloud.com/)
-2. **Create cluster**: Set up a new TiDB cluster
-3. **Get credentials**: Copy connection details from cluster overview
-4. **Update `.env`**: Add your TiDB credentials to enable smart features
+- **Automatic Setup**: Weaviate runs automatically via Docker Compose
+- **Data Persistence**: All precedent data is stored in Docker volumes
+- **No Manual Configuration**: Everything is pre-configured to work locally
+- **Access Console**: View stored precedents at http://localhost:8080/v1
 
 ### API Keys (Optional)
 
 Enhance Genesis with additional services:
 
-- **Jina AI**: Enhanced AI processing capabilities (get free key from [jina.ai](https://jina.ai/) - no registration required)
+- **Jina AI**: Enhanced reranking capabilities (get free key from [jina.ai](https://jina.ai/) - no registration required)
 - **Google Gemini**: Alternative AI model for certain tasks
 - **Brave Search**: Enhanced web search capabilities  
 - **Serper**: Google search integration
@@ -325,43 +379,73 @@ This project is licensed under the Apache 2.0 License. The OpenAI gpt-oss models
 
 ```
 Genesis/
-├── 🌐 Frontend (Next.js + React + TypeScript)
-│   ├── src/
-│   │   ├── app/          # Next.js 15 app router
-│   │   ├── components/   # React components (15 files)
-│   │   └── lib/          # TypeScript utilities
-│   └── Dockerfile
+├── 📱 Frontend (Flutter + Dart)
+│   └── gui/
+│       ├── lib/
+│       │   ├── main.dart         # Application entry point
+│       │   ├── layout.dart       # Root layout with sidebar & panels
+│       │   ├── core/             # Configuration
+│       │   ├── data/             # Models and services
+│       │   │   ├── models/       # Data models (messages, attachments)
+│       │   │   └── services/     # API clients (chat, streaming, artifacts)
+│       │   └── widgets/          # UI components
+│       │       ├── chat/         # Chat interface components
+│       │       ├── execution/    # Execution visualization
+│       │       ├── previews/     # File preview components
+│       │       └── common/       # Shared widgets
+│       ├── assets/               # Static resources
+│       ├── android/ios/linux/macos/windows/web/  # Platform configs
+│       └── pubspec.yaml          # Flutter dependencies
 ├── 🔧 Backend (FastAPI + Python)
-│   ├── app/
-│   │   ├── api/v1/       # REST API endpoints (11 modules)
-│   │   ├── db/           # Database models & TiDB integration
-│   │   ├── models/       # Pydantic schemas
-│   │   └── services/     # Business logic layer
-│   ├── inputs/           # User file uploads (organized by conversation)
-│   ├── outputs/          # Processing results (organized by conversation)
-│   └── start.py          # Backend entry point
-├── 🧠 Core Engine (LangGraph Orchestration)
-│   ├── src/
-│   │   ├── orchestrator.py    # Main LangGraph workflow coordinator
-│   │   ├── agents/             # AI agents (precedent, classifier, router, finalizer)
-│   │   ├── path/               # Tool registry and path generation system
-│   │   ├── tools/              # Processing tools
-│   │   │   ├── path_tools/     # OCR, translation, audio, image processing
-│   │   │   └── agent_tools/    # Web search and utility tools
-│   │   ├── executor/           # Workflow execution engine
-│   │   └── streaming.py        # Real-time updates and WebSocket support
-│   └── main.py                 # CLI interface
-├── 🗄️ Data & Models
-│   ├── data/font/        # Font files for text inpainting
-│   ├── tests/examples/   # Test files (images, audio, documents)
-│   └── requirements-*.txt # Dependency specifications
+│   └── src/
+│       ├── main.py               # FastAPI application entry point
+│       ├── api/                  # REST API endpoints
+│       │   ├── chat.py           # Chat management
+│       │   ├── message.py        # Message handling
+│       │   ├── artifact.py       # File artifacts
+│       │   └── model.py          # AI model info
+│       ├── db/                   # Database layer
+│       │   ├── database.py       # PostgreSQL connection
+│       │   ├── model.py          # SQLAlchemy models
+│       │   ├── client.py         # Weaviate client setup
+│       │   └── semantics.py      # Vector operations
+│       └── orchestrator/         # LangGraph orchestration (see below)
+├── 🧠 Orchestrator (LangGraph Workflow Engine)
+│   └── src/orchestrator/
+│       ├── core/                 # Core orchestration
+│       │   ├── orchestrator.py   # Main coordinator
+│       │   └── state.py          # Workflow state
+│       ├── agents/               # AI agents
+│       │   ├── classifier.py     # Input classification
+│       │   ├── router.py         # Path routing
+│       │   ├── finalizer.py      # Result assembly
+│       │   ├── precedent.py      # Precedent learning
+│       │   └── prompts/          # YAML prompt templates
+│       ├── path/                 # Path planning system
+│       │   ├── metadata.py       # Type system (WorkflowType, FileType)
+│       │   ├── registry.py       # Tool discovery
+│       │   └── generator.py      # Path generation (DFS)
+│       ├── executor/             # Execution engine
+│       │   └── execution.py      # LangGraph execution
+│       ├── tools/                # Processing tools
+│       │   ├── path_tools/       # OCR, translate, denoise, inpaint, erase
+│       │   └── agent_tools/      # Web search, utilities
+│       └── stream/               # WebSocket streaming
+├── 🗄️ Data & Testing
+│   ├── data/font/                # Font files for text inpainting
+│   ├── inputs/                   # User uploads (by conversation)
+│   ├── outputs/                  # Processing results (by conversation)
+│   └── tmp/                      # Temporary files
 ├── 🐳 Deployment
-│   ├── docker-compose.yml       # Main deployment configuration
-│   ├── docker-compose.gpu.yml   # GPU-accelerated variant
-│   ├── docker-compose.dev.yml   # Development mode
-│   └── Dockerfile               # Container definitions
-└── 📁 Workspace Management
-    ├── inputs/           # Conversation-based file organization
-    ├── outputs/          # Results organized by thread ID
-    └── .env             # Environment configuration
+│   ├── docker-compose.yml        # Main deployment (PostgreSQL, Weaviate, Backend)
+│   ├── docker-compose.gpu.yml    # GPU variant (CUDA 12.8)
+│   ├── docker-compose.dev.yml    # Dev mode with hot reload
+│   ├── Dockerfile                # Backend container
+│   ├── requirements-common.txt   # Python dependencies
+│   ├── requirements-cpu.txt      # CPU-specific packages
+│   └── requirements-gpu.txt      # GPU-specific packages
+└── 📋 Documentation
+    ├── README.md                 # This file
+    ├── project_structure.md      # Detailed structure documentation
+    └── .env                      # Environment configuration
 ```

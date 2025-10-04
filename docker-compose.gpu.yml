@@ -1,5 +1,60 @@
 # GPU-enabled docker-compose for CUDA 12.x systems
 services:
+  # PostgreSQL service (REQUIRED for main application database)
+  postgres:
+    image: postgres:15-alpine
+    container_name: genesis-postgres-gpu
+    environment:
+      POSTGRES_DB: gen
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - genesis-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d gen"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  # Weaviate service (REQUIRED for vector search and precedent storage)
+  weaviate:
+    image: cr.weaviate.io/semitechnologies/weaviate:1.33.0
+    container_name: genesis-weaviate-gpu
+    command:
+    - --host
+    - 0.0.0.0
+    - --port
+    - '8080'
+    - --scheme
+    - http
+    ports:
+      - "8080:8080"
+      - "50051:50051"
+    volumes:
+      - weaviate_data:/var/lib/weaviate
+    environment:
+      QUERY_DEFAULTS_LIMIT: 25
+      AUTHENTICATION_ANONYMOUS_ACCESS_ENABLED: 'true'
+      PERSISTENCE_DATA_PATH: '/var/lib/weaviate'
+      ENABLE_API_BASED_MODULES: 'true'
+      ENABLE_MODULES: 'text2vec-ollama'
+      CLUSTER_HOSTNAME: 'node1'
+      # Ollama connection (using host system Ollama)
+      OLLAMA_ENDPOINT: 'http://host.docker.internal:11434'
+    networks:
+      - genesis-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:8080/v1/.well-known/ready || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
 
   backend:
     build:
@@ -11,24 +66,31 @@ services:
     environment:
       - GENESIS_KEEP_WORKSPACE=1
       - GENESIS_PROJECT_ROOT=/app
-      - DATABASE_URL=sqlite:///./genesis.db
+      - DATABASE_URL=postgresql+psycopg://postgres:postgres@postgres:5432/gen
       - CORS_ORIGINS=["http://localhost:3000","http://frontend:3000"]
       - ALLOWED_FILE_ROOTS=/app/.staging_uploads:/tmp
       # Ollama configuration (using host system Ollama)
       - OLLAMA_BASE_URL=http://host.docker.internal:11434
       - OLLAMA_HOST=host.docker.internal:11434
+      # Weaviate connection
+      - WEAVIATE_URL=http://weaviate:8080
     env_file:
       - .env
     volumes:
       # Persist data directories (bind-mounted so you can view them on host)
-      - ./backend/data:/app/data
-      - ./backend/tmp:/app/tmp
-      - ./backend/inputs:/app/inputs
-      - ./backend/outputs:/app/outputs
+      - ./data:/app/data
+      - ./tmp:/app/tmp
+      - ./inputs:/app/inputs
+      - ./outputs:/app/outputs
       # Mount for SQLite database persistence
-      - ./backend/db:/app/db
+      - ./db:/app/db
       # Persist SQLite DB to Windows AppData (Docker expands ${APPDATA})
       - ${APPDATA}/Genesis:/root/.genesis
+    depends_on:
+      postgres:
+        condition: service_healthy
+      weaviate:
+        condition: service_healthy
     networks:
       - genesis-network
     restart: unless-stopped
@@ -56,6 +118,7 @@ services:
       - NEXT_PUBLIC_API_BASE=http://localhost:8000
     depends_on:
       - backend
+      - weaviate
     networks:
       - genesis-network
     restart: unless-stopped
@@ -73,14 +136,11 @@ services:
       - .env
     volumes:
       # Same volumes as backend for data consistency
-      - genesis_data:/app/data
-      - genesis_tmp:/app/tmp
-      - genesis_inputs:/app/inputs
-      - genesis_outputs:/app/outputs
-      - genesis_db:/app/db
-      # Mount local directories for file uploads/processing
-      - ./inputs:/app/local_inputs:ro
-      - ./outputs:/app/local_outputs
+      - ./data:/app/data
+      - ./tmp:/app/tmp
+      - ./inputs:/app/inputs
+      - ./outputs:/app/outputs
+      - ./db:/app/db
     networks:
       - genesis-network
     command: ["python", "main.py"]
@@ -96,6 +156,10 @@ volumes:
   genesis_inputs:
   genesis_outputs:
   genesis_db:
+  postgres_data:
+    driver: local
+  weaviate_data:
+    driver: local
 
 networks:
   genesis-network:

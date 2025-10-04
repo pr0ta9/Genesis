@@ -7,11 +7,11 @@
 ## TiDB Vector Search and Embedding
 pytidb[models]==0.0.13
 
-## Google Gemini (Generative Language)
-google-ai-generativelanguage==0.6.18
-google-api-core==2.25.1
-google-auth==2.40.3
-googleapis-common-protos==1.70.0
+## weaviate
+weaviate-client==4.16.10
+
+## PostgreSQL driver
+psycopg==3.2.10
 
 ## OpenAI Platform
 openai==1.103.0

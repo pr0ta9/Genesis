@@ -9,16 +9,34 @@ services:
     volumes:
       # Mount source code for development
       - ./src:/app/src
-      - ./backend:/app/backend
       - ./main.py:/app/main.py
       # Development data directories
       - ./data:/app/data
-      - ./tmp:/app/tmp
+      # Don't mount tmp - it's just temporary execution files, let container create them
+      # - ./tmp:/app/tmp
+      - ./inputs:/app/inputs
+      - ./outputs:/app/outputs
     environment:
+      - GENESIS_KEEP_WORKSPACE=1
+      - GENESIS_PROJECT_ROOT=/app
+      - DATABASE_URL=postgresql+psycopg://postgres:postgres@postgres:5432/gen
+      - CORS_ORIGINS=["http://localhost:3000","http://frontend:3000"]
+      - ALLOWED_FILE_ROOTS=/app/.staging_uploads:/tmp
+      - OLLAMA_BASE_URL=http://host.docker.internal:11434
+      - OLLAMA_HOST=host.docker.internal:11434
       - LOG_LEVEL=DEBUG
-    command: ["python", "-m", "uvicorn", "backend.app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+      # Weaviate connection
+      - WEAVIATE_URL=http://weaviate:8080
+    command: ["python", "-m", "uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload", "--reload-dir", "/app/src", "--reload-exclude", "**/__pycache__/**"]
     # Request GPU for Compose (non-Swarm)
     gpus: all
+    depends_on:
+      postgres:
+        condition: service_healthy  
+      weaviate:
+        condition: service_healthy
+    networks:
+      - genesis-network
 
   frontend:
     build:
