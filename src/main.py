@@ -18,6 +18,8 @@ from src.db.client import get_weaviate_client, close_weaviate_client
 from src.api.chat import router as chat_router
 from src.api.message import router as message_router
 from src.api.artifact import router as artifact_router
+from src.api.model import router as model_router
+from src.api.precedent import router as precedent_router
 
 
 # Application settings
@@ -121,6 +123,17 @@ def create_app() -> FastAPI:
         artifact_router,
         prefix=API_PREFIX,
         # Artifacts don't require orchestrator/weaviate dependencies
+    )
+    app.include_router(
+        model_router,
+        prefix=API_PREFIX,
+        # Model management doesn't require weaviate but needs orchestrator for selection
+    )
+    app.include_router(
+        precedent_router,
+        prefix=API_PREFIX,
+        dependencies=[Depends(require_weaviate)],
+        # Precedent management requires Weaviate for vector storage
     )
     return app
 

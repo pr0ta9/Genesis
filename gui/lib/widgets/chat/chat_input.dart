@@ -9,12 +9,14 @@ class ChatInput extends StatefulWidget {
   final TextEditingController controller;
   final Function(String message, List<FileAttachment> attachments) onSend;
   final bool isLoading;
+  final Widget? modelSelector;
 
   const ChatInput({
     super.key,
     required this.controller,
     required this.onSend,
     this.isLoading = false,
+    this.modelSelector,
   });
 
   @override
@@ -287,6 +289,12 @@ class ChatInputState extends State<ChatInput> {
               ],
               
               const Spacer(),
+              
+              // Model Selector (if provided) - positioned before send button
+              if (widget.modelSelector != null) ...[
+                widget.modelSelector!,
+                const SizedBox(width: 8),
+              ],
               
               // Send Button
               AnimatedContainer(

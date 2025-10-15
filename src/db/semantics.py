@@ -1,5 +1,5 @@
 import json
-from weaviate.classes.query import Rerank
+from weaviate.classes.query import Rerank, Filter
 
 def show_all(client, collection_name: str = "precedent"):
     collection = client.collections.get(collection_name)
@@ -96,14 +96,31 @@ def save(client, data: dict, collection_name: str = "precedent"):
     print(f"🔍 [SEMANTICS] All precedents: {show_all(client)}")
     return uuid
 
-def delete(client, uuid: str, collection_name: str = "precedent"):
+def delete(client, uuid_list: list[str], collection_name: str = "precedent"):
+    """
+    Delete multiple precedents by their UUIDs.
+    :param client: The Weaviate client instance.
+    :param uuid_list: A list of UUID strings to delete.
+    :param collection_name: The name of the collection (default: "precedent").
+    :return: Number of objects deleted.
+    """
+    
+    if not uuid_list:
+        return 0
+    
     collection = client.collections.get(collection_name)
     try:
-        deleted = collection.data.delete_by_id(uuid)
-        return True
+        # Use delete_many with filter for batch deletion
+        result = collection.data.delete_many(
+            where=Filter.by_id().contains_any(uuid_list)
+        )
+        # result contains information about deletion, including count
+        deleted_count = getattr(result, 'successful', len(uuid_list))
+        print(f"🗑️ [SEMANTICS] Deleted {deleted_count} precedent(s)")
+        return deleted_count
     except Exception as e:
-        print(f"Error deleting precedent: {e}")
-        return False
+        print(f"Error deleting precedents: {e}")
+        return 0
     
 def delete_all(client, collection_name: str = "precedent"):
     collection = client.collections.get(collection_name)

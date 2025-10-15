@@ -16,21 +16,41 @@ from .logging_utils import get_logger, pretty, format_messages, log_section
 
 
 class Orchestrator:
-    def __init__(self, llm_type: str = "ollama", model_name: str = "gpt-oss:20b", temperature: float = 0.6, weaviate_client=None):
+    def __init__(
+        self,
+        llm_type: str = "ollama",
+        model_name: str = "gpt-oss:20b",
+        temperature: float = 0.6,
+        weaviate_client=None,
+        aws_region: str = None,
+        aws_access_key_id: str = None,
+        aws_secret_access_key: str = None,
+    ):
         """
         Initialize the orchestrator with configurable LLM settings.
         
         Args:
-            llm_type: Type of LLM to use (e.g., "ollama", "openai")
-            model_name: Name of the model to use (e.g., "gpt-oss:20b", "gpt-4")
+            llm_type: Type of LLM to use (e.g., "ollama", "bedrock")
+            model_name: Name of the model to use (e.g., "gpt-oss:20b", "anthropic.claude-3-sonnet-20240229-v1:0")
+            temperature: Temperature for model sampling
             weaviate_client: Shared Weaviate client instance (optional)
+            aws_region: AWS region for Bedrock (required if llm_type is "bedrock")
+            aws_access_key_id: AWS access key ID for Bedrock (required if llm_type is "bedrock")
+            aws_secret_access_key: AWS secret access key for Bedrock (required if llm_type is "bedrock")
         """
         load_dotenv(override=True)
         # Store shared Weaviate client
         self.weaviate_client = weaviate_client
         
         # Initialize LLM for agents with configurable type and model
-        self.llm = setup_llm(llm_type, model_name, temperature)
+        self.llm = setup_llm(
+            llm_type,
+            model_name,
+            temperature,
+            aws_region=aws_region,
+            aws_access_key_id=aws_access_key_id,
+            aws_secret_access_key=aws_secret_access_key,
+        )
         self.llm.bind_tools([search])
         # Initialize agents
         self.precedent = Precedent(self.llm)

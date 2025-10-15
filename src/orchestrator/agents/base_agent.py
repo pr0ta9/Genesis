@@ -161,36 +161,58 @@ class BaseAgent(ABC, Generic[ResponseType]):
             
             # Prepare invocation parameters
         metadata = self.prompt_config.get("metadata", {})
-        invoke_options = {
-            "temperature": metadata.get("temperature", 0.1),
-            "max_tokens": metadata.get("max_tokens", 500),
-        }
+        
+        # Check if LLM is Ollama (which uses 'options' parameter)
+        model_name = getattr(self.base_llm, "model", "")
+        is_ollama = "ollama" in str(type(self.base_llm).__name__).lower()
+        
+        if is_ollama:
+            # Ollama wraps parameters in 'options'
+            invoke_options = {
+                "temperature": metadata.get("temperature", 0.1),
+                "max_tokens": metadata.get("max_tokens", 500),
+            }
+            base_invoke_params = {"options": invoke_options}
+        else:
+            # Other providers (Bedrock, OpenAI, etc.) use direct parameters
+            base_invoke_params = {
+                "temperature": metadata.get("temperature", 0.1),
+                "max_tokens": metadata.get("max_tokens", 500),
+            }
         
         # Enable reasoning if configured in metadata
         invoke_kwargs = self.prompt_config.get("invoke_kwargs", {})
 
         # Invoke LLM
         self.logger.info("Starting invoke for: %s", node)
-        # print(f"invoke_kwargs: {invoke_kwargs}")
-        # print(f"processing_messages for node {node}: {processing_messages}")
+        print(f"🔧 [DEBUG] invoke_kwargs: {invoke_kwargs}")
+        print(f"🔧 [DEBUG] base_invoke_params: {base_invoke_params}")
+        print(f"🔧 [DEBUG] is_ollama: {is_ollama}")
+        print(f"🔧 [DEBUG] LLM type: {type(self.llm).__name__}")
+        print(f"🔧 [DEBUG] Base LLM type: {type(self.base_llm).__name__}")
+        
         # If using structured output, capture provider reasoning first, then request structured parse
         STOP_THINK = ["</think>"]
         if self._use_structured_output:
             # Step 1: capture reasoning (if available) using stop token
             try:
+                print(f"🔧 [DEBUG] Calling base_llm.invoke() for reasoning capture...")
                 think_msg = self.base_llm.invoke(
                     processing_messages,
-                    options=invoke_options,
                     stop=STOP_THINK,
+                    **base_invoke_params,
                     **{**invoke_kwargs, "reasoning": True},  # type: ignore[arg-type]
                 )
+                print(f"🔧 [DEBUG] Reasoning capture successful")
                 writer({"node": node, "content": think_msg.additional_kwargs.get("reasoning_content"), "timestamp": think_msg.response_metadata.get("created_at"), "think_duration": think_msg.response_metadata.get("eval_duration")})
                 reasoning_text = getattr(think_msg, "additional_kwargs", {}).get("reasoning_content")
                 if not reasoning_text:
                     content = getattr(think_msg, "content", None)
                     if isinstance(content, str) and content.strip():
                         reasoning_text = content
-            except Exception:
+            except Exception as e:
+                print(f"❌ [DEBUG] Error capturing reasoning: {type(e).__name__}: {e}")
+                self.logger.warning("Failed to capture reasoning: %s", e)
                 reasoning_text = None
 
             # Step 2: append captured reasoning as assistant <think> and call structured llm
@@ -198,19 +220,35 @@ class BaseAgent(ABC, Generic[ResponseType]):
             if reasoning_text:
                 structured_messages.append(AIMessage(content=f"<think>\n{reasoning_text}\n</think>\n"))
 
-            result = self.llm.invoke(
-                structured_messages,
-                options=invoke_options,
-                **{k: v for k, v in invoke_kwargs.items() if k != "reasoning"},
-            )
+            try:
+                print(f"🔧 [DEBUG] Calling llm.invoke() for structured output...")
+                result = self.llm.invoke(
+                    structured_messages,
+                    **base_invoke_params,
+                    **{k: v for k, v in invoke_kwargs.items() if k != "reasoning"},
+                )
+                print(f"🔧 [DEBUG] Structured output call successful")
+            except Exception as e:
+                print(f"❌ [DEBUG] FATAL ERROR in llm.invoke(): {type(e).__name__}: {e}")
+                self.logger.error("LLM invocation failed: %s", e, exc_info=True)
+                raise
         else:
-            result = self.llm.invoke(
-                processing_messages,
-                options=invoke_options,
-                **invoke_kwargs,
-            )
-            writer({"node": node, "content": result.additional_kwargs.get("reasoning_content"), "timestamp": result.response_metadata.get("created_at"), "think_duration": result.response_metadata.get("eval_duration")})
-        print(f"result: {result}")
+            try:
+                print(f"🔧 [DEBUG] Calling llm.invoke() (unstructured mode)...")
+                result = self.llm.invoke(
+                    processing_messages,
+                    **base_invoke_params,
+                    **invoke_kwargs,
+                )
+                print(f"🔧 [DEBUG] Unstructured LLM call successful")
+                writer({"node": node, "content": result.additional_kwargs.get("reasoning_content"), "timestamp": result.response_metadata.get("created_at"), "think_duration": result.response_metadata.get("eval_duration")})
+            except Exception as e:
+                print(f"❌ [DEBUG] FATAL ERROR in llm.invoke(): {type(e).__name__}: {e}")
+                self.logger.error("LLM invocation failed: %s", e, exc_info=True)
+                raise
+                
+        print(f"🔧 [DEBUG] result type: {type(result).__name__}")
+        print(f"🔧 [DEBUG] result: {result}")
         self.logger.info("Completed invoke for: %s", node)
 
         # Process result for unstructured models

@@ -21,10 +21,11 @@ ollama==0.5.3
 
 ## LangChain/Graph ecosystem and connectors
 langchain==0.3.27
-langchain-core==0.3.75
+langchain-core==0.3.79
 langchain-community==0.3.29
 langchain-openai==0.3.32
 langchain-ollama==0.3.7
+langchain-aws==0.2.35
 langchain-google-genai==2.1.10
 langchain-text-splitters==0.3.10
 langgraph==0.6.6
@@ -44,7 +45,7 @@ tiktoken==0.11.0
 
 ## Embeddings / ML utils
 sentence-transformers==5.1.0
-numpy==2.2.6
+numpy==1.26.4
 pandas==2.3.2
 scipy==1.16.1
 scikit-learn==1.7.1

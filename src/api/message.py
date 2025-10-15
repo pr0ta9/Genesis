@@ -383,6 +383,16 @@ async def post_message(  # Changed to async
     user_msg_id = user_msg.id
     print(f"[DB LOG] Extracted IDs - user_msg_id: {user_msg_id}, assistant_msg_id: {assistant_msg_id}")
     
+    # Fetch all messages BEFORE closing the db session
+    print(f"[DB LOG] About to call crud.get_messages with db session: {db}")
+    db_messages = crud.get_messages(db, chat_id)
+    print(f"[DB LOG] Successfully got {len(db_messages)} messages")
+    
+    # Close the database session NOW to free up connection pool
+    # The session will be reopened later only for final persistence
+    db.close()
+    print(f"[DB LOG] Closed db session to free connection pool")
+    
     # Build thread-safe config (each request has isolated config)
     config = {
         "configurable": {
@@ -404,9 +414,7 @@ async def post_message(  # Changed to async
         
         try:
             # Build full conversation context in chronological order
-            print(f"[DB LOG] About to call crud.get_messages with db session: {db}")
-            db_messages = crud.get_messages(db, chat_id)
-            print(f"[DB LOG] Successfully got {len(db_messages)} messages")
+            # (db_messages already fetched above before closing db session)
             messages: List[Union[HumanMessage, AIMessage]] = []
             for m in reversed(db_messages):  # crud returns DESC; reverse to ASC
                 # Skip the assistant message placeholder we just created (it's empty)
@@ -499,28 +507,10 @@ async def post_message(  # Changed to async
                             if node_key in patch:
                                 last_updated_node = node_key
 
-                        try:
-                            # Flatten the patch for database persistence (this extracts Interrupt.value)
-                            flat_patch = _flatten_state_update(patch)
-                            
-                            if state_uid is None:
-                                # For first state creation, merge all accumulated states
-                                merged_state = {}
-                                for state in accum_state:
-                                    flat_state = _flatten_state_update(state)
-                                    _deep_merge(merged_state, flat_state)
-                                print(f"[DB LOG] About to call crud.create_state with db session: {db}")
-                                st = crud.create_state(db, merged_state)
-                                print(f"[DB LOG] Successfully created state: {st}")
-                                state_uid = getattr(st, "uid", None)
-                            else:
-                                # Update with flattened patch
-                                print(f"[DB LOG] About to call crud.update_state with db session: {db}")
-                                crud.update_state(db, state_uid, flat_patch)
-                                print(f"[DB LOG] Successfully updated state uid: {state_uid}")
-                        except Exception:
-                            # Best-effort persistence; never break the stream
-                            pass
+                        # NOTE: Incremental state persistence is now DISABLED during streaming
+                        # to avoid holding database connections open. Final state will be
+                        # persisted after streaming completes using a new session.
+                        # This prevents connection pool exhaustion.
 
                 # Collect structured reasoning from specific custom events only
                 if etype == "custom":
@@ -555,19 +545,24 @@ async def post_message(  # Changed to async
                 flat_state = _flatten_state_update(state)
                 _deep_merge(merged_state, flat_state)
             
+            # Create a NEW database session for final persistence
+            # (the original session was closed before streaming started)
+            from src.db.database import SessionLocal
+            final_db = SessionLocal()
             try:
                 if state_uid is None:
                     if accum_state:
-                        print(f"[DB LOG] About to call crud.create_state (final) with db session: {db}")
-                        st = crud.create_state(db, merged_state)
+                        print(f"[DB LOG] About to call crud.create_state (final) with NEW db session: {final_db}")
+                        st = crud.create_state(final_db, merged_state)
                         state_uid = getattr(st, "uid", None)
                         print(f"[DB LOG] Successfully created final state: {state_uid}")
                 else:
                     if accum_state:
-                        print(f"[DB LOG] About to call crud.update_state (final) with db session: {db}")
-                        crud.update_state(db, state_uid, merged_state)
+                        print(f"[DB LOG] About to call crud.update_state (final) with NEW db session: {final_db}")
+                        crud.update_state(final_db, state_uid, merged_state)
                         print(f"[DB LOG] Successfully updated final state: {state_uid}")
-            except Exception:
+            except Exception as e:
+                print(f"[DB LOG] Error in final state persistence: {e}")
                 # Best-effort persistence; do not interrupt response generation
                 pass
 
@@ -639,17 +634,23 @@ async def post_message(  # Changed to async
                 print(f"[DB LOG] Failed to extract output attachments: {e}")
             
             # Update assistant message with final content, state, and attachments
-            print(f"[DB LOG] About to call crud.update_message with db session: {db}, assistant_msg_id: {assistant_msg_id}")
-            crud.update_message(
-                db,
-                assistant_msg_id,
-                content=msg_content,
-                state_id=state_uid,
-                reasoning={"content": reasoning_events} if reasoning_events else None,
-                msg_type=msg_type,
-                attachments=output_attachments if output_attachments else None,
-            )
-            print(f"[DB LOG] Successfully updated assistant message {assistant_msg_id} with state uid: {state_uid} and {len(output_attachments)} attachments")
+            # Use the same final_db session created above
+            try:
+                print(f"[DB LOG] About to call crud.update_message with NEW db session: {final_db}, assistant_msg_id: {assistant_msg_id}")
+                crud.update_message(
+                    final_db,
+                    assistant_msg_id,
+                    content=msg_content,
+                    state_id=state_uid,
+                    reasoning={"content": reasoning_events} if reasoning_events else None,
+                    msg_type=msg_type,
+                    attachments=output_attachments if output_attachments else None,
+                )
+                print(f"[DB LOG] Successfully updated assistant message {assistant_msg_id} with state uid: {state_uid} and {len(output_attachments)} attachments")
+            finally:
+                # ALWAYS close the final_db session to free the connection
+                final_db.close()
+                print(f"[DB LOG] Closed final_db session")
 
             # Emit a final persisted notification so the client has IDs
             yield json.dumps({
@@ -664,9 +665,16 @@ async def post_message(  # Changed to async
 
         except Exception as e:
             print(f"[DB LOG] Exception in generator: {type(e).__name__}: {str(e)}")
+            # Make sure to close final_db if it was created
+            try:
+                if 'final_db' in locals():
+                    final_db.close()
+                    print(f"[DB LOG] Closed final_db session after exception")
+            except:
+                pass
             yield _ndjson("error", {"message": f"{type(e).__name__}: {str(e)}"})
 
-    print(f"[DB LOG] About to return StreamingResponse, db session before return: {db}")
+    print(f"[DB LOG] About to return StreamingResponse (original db session already closed)")
     return StreamingResponse(event_generator(), media_type="application/x-ndjson")
 
 def _normalize_workflow_enum(value: Any) -> Any:
@@ -916,15 +924,17 @@ def delete_message_precedent(
     
     try:
         print(f"[PRECEDENT DEBUG] Deleting precedent: {message.precedent_id}")
-        success = semantics.delete(weaviate_client, message.precedent_id, collection_name="precedent")
         
-        if not success:
+        # Clear precedent_id from all messages with this precedent
+        crud.clear_precedent_ids(db, [message.precedent_id])
+        
+        # Delete from Weaviate
+        deleted_count = semantics.delete(weaviate_client, [message.precedent_id], collection_name="precedent")
+        
+        if deleted_count == 0:
             raise HTTPException(status_code=500, detail="Failed to delete precedent from Weaviate")
         
         print(f"[PRECEDENT DEBUG] ✅ Deleted from Weaviate")
-        
-        # Clear precedent_id from message
-        crud.set_message_precedent_id(db, message.id, None)
         
         return {
             "success": True,

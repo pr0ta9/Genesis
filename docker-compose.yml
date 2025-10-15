@@ -129,8 +129,8 @@ services:
         condition: service_healthy
       weaviate:
         condition: service_healthy
-      db-migrate:
-        condition: service_completed_successfully  # Wait for migration to complete
+      # db-migrate:
+      #   condition: service_completed_successfully  # Wait for migration to complete
 # No longer depends on ollama service - using host Ollama
     restart: unless-stopped
     healthcheck:
@@ -139,28 +139,28 @@ services:
       timeout: 10s
       retries: 3
 
-  frontend:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile
-      args:
-        NEXT_PUBLIC_API_BASE: "http://localhost:8000"
-    container_name: genesis-frontend
-    ports:
-      - "3000:3000"
-    environment:
-      - NEXT_PUBLIC_API_BASE=http://localhost:8000
-    depends_on:
-      - backend
-      - weaviate
-    networks:
-      - genesis-network
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
+  # frontend:
+  #   build:
+  #     context: ./frontend
+  #     dockerfile: Dockerfile
+  #     args:
+  #       NEXT_PUBLIC_API_BASE: "http://localhost:8000"
+  #   container_name: genesis-frontend
+  #   ports:
+  #     - "3000:3000"
+  #   environment:
+  #     - NEXT_PUBLIC_API_BASE=http://localhost:8000
+  #   depends_on:
+  #     - backend
+  #     - weaviate
+  #   networks:
+  #     - genesis-network
+  #   restart: unless-stopped
+  #   healthcheck:
+  #     test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000"]
+  #     interval: 30s
+  #     timeout: 10s
+  #     retries: 3
 
   # Optional: CLI service for running Genesis CLI commands
   cli:

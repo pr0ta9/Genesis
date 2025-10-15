@@ -167,6 +167,10 @@ def get_message(db: Session, message_id: int) -> Optional[Message]:
     """Get a specific message by ID."""
     return db.get(Message, message_id)
 
+def get_message_by_precedent_id(db: Session, precedent_id: str) -> Optional[Message]:
+    """Get the first message that references a specific precedent ID."""
+    return db.query(Message).filter(Message.precedent_id == precedent_id).first()
+
 def update_message(
     db: Session,
     message_id: int,
@@ -237,6 +241,34 @@ def set_message_precedent_id(db: Session, message_id: int, precedent_id: Optiona
         return False
     db.refresh(message)
     return True
+
+def clear_precedent_ids(db: Session, precedent_ids: List[str]) -> int:
+    """Clear precedent_id from all messages that reference any of the given precedent UUIDs.
+    
+    Args:
+        db: Database session
+        precedent_ids: List of precedent UUIDs to clear
+        
+    Returns:
+        Number of messages updated
+    """
+    if not precedent_ids:
+        return 0
+    
+    try:
+        # Update all messages that have these precedent_ids
+        result = db.query(Message).filter(
+            Message.precedent_id.in_(precedent_ids)
+        ).update(
+            {Message.precedent_id: None},
+            synchronize_session=False
+        )
+        db.commit()
+        return result or 0
+    except Exception as e:
+        db.rollback()
+        print(f"Error clearing precedent IDs: {e}")
+        return 0
 
 # =========================================
 # State CRUD

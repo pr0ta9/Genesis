@@ -2,14 +2,18 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import 'package:gui/data/models/ai_model.dart';
 import 'package:gui/data/models/file_attachment.dart';
 import 'package:gui/data/services/chat_service.dart';
+import 'package:gui/data/services/model_service.dart';
 import 'package:gui/data/services/streaming_service.dart';
 import 'package:gui/widgets/chat/chat_input.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:gui/widgets/chat/chat_message.dart';
 import 'package:gui/widgets/chat/drag_drop_handler.dart';
 import 'package:gui/widgets/chat/message_reasoning.dart';
 import 'package:gui/widgets/chat/summary_card.dart';
+import 'package:gui/widgets/common/model_selector.dart';
 
 class ChatPanel extends StatefulWidget {
   final String? chatId;
@@ -33,14 +37,20 @@ class ChatPanel extends StatefulWidget {
 
 class _ChatPanelState extends State<ChatPanel> {
   final ChatService _service = const ChatService();
+  final ModelService _modelService = const ModelService();
   late StreamingService _streamingService;
   final ScrollController _scrollController = ScrollController();
   final GlobalKey<ChatInputState> _chatInputKey = GlobalKey<ChatInputState>();
+  final GlobalKey<ModelSelectorState> _modelSelectorKey = GlobalKey<ModelSelectorState>();
   bool _loading = false;
   String? _error;
   List<Map<String, dynamic>> _messages = <Map<String, dynamic>>[];
   final TextEditingController _controller = TextEditingController();
   bool _sending = false;
+  
+  // Model selection state
+  AIModel? _selectedModel;
+  String? _lastUsedModelId;
   
   // Streaming state
   StreamingMessage? _currentStreamingMessage;
@@ -339,6 +349,15 @@ class _ChatPanelState extends State<ChatPanel> {
     }
   }
 
+  void _handleModelChanged(AIModel model) {
+    setState(() {
+      _selectedModel = model;
+      // Update last used model ID since model_selector already selected it on backend
+      _lastUsedModelId = model.id;
+    });
+    debugPrint('🎯 MODEL CHANGED: ${model.id}');
+  }
+
   Future<void> _sendMessage(String message, List<FileAttachment> attachments) async {
     if (message.isEmpty && attachments.isEmpty) return;
     
@@ -358,6 +377,51 @@ class _ChatPanelState extends State<ChatPanel> {
     });
 
     try {
+      // Check if model has changed and needs to be selected before sending
+      if (_selectedModel != null && _selectedModel!.id != _lastUsedModelId) {
+        debugPrint('🎯 MODEL CHANGED: Selecting model ${_selectedModel!.id} before sending message');
+        try {
+          // Check if it's a Bedrock model and load credentials
+          final isBedrock = _selectedModel!.provider == 'bedrock';
+          
+          if (isBedrock) {
+            // Load AWS credentials from SharedPreferences
+            final prefs = await SharedPreferences.getInstance();
+            final awsRegion = prefs.getString('bedrock_region');
+            final awsAccessKey = prefs.getString('bedrock_access_key');
+            final awsSecretKey = prefs.getString('bedrock_secret_key');
+            
+            if (awsRegion == null || awsAccessKey == null || awsSecretKey == null) {
+              debugPrint('⚠️ AWS credentials not found when trying to send message');
+              setState(() {
+                _error = 'Please configure AWS credentials in Settings first';
+                _sending = false;
+              });
+              return;
+            }
+            
+            await _modelService.selectModel(
+              _selectedModel!.id,
+              awsRegion: awsRegion,
+              awsAccessKeyId: awsAccessKey,
+              awsSecretAccessKey: awsSecretKey,
+            );
+          } else {
+            await _modelService.selectModel(_selectedModel!.id);
+          }
+          
+          _lastUsedModelId = _selectedModel!.id;
+          debugPrint('✅ MODEL SELECTED: ${_selectedModel!.id}');
+        } catch (e) {
+          debugPrint('❌ MODEL SELECTION ERROR: $e');
+          setState(() {
+            _error = 'Failed to select model: $e';
+            _sending = false;
+          });
+          return;
+        }
+      }
+
       debugPrint('📤 SENDING MESSAGE: $message with ${attachments.length} attachments');
       debugPrint('🔄 MESSAGES: $_messages');
 
@@ -861,6 +925,11 @@ class _ChatPanelState extends State<ChatPanel> {
                                 controller: _controller,
                                 onSend: _sendMessage,
                                 isLoading: _sending,
+                                modelSelector: ModelSelector(
+                                  key: _modelSelectorKey,
+                                  onModelChanged: _handleModelChanged,
+                                  showLabel: false,
+                                ),
                               ),
                             ),
                           ],
@@ -880,6 +949,11 @@ class _ChatPanelState extends State<ChatPanel> {
                     controller: _controller,
                     onSend: _sendMessage,
                     isLoading: _sending,
+                    modelSelector: ModelSelector(
+                      key: _modelSelectorKey,
+                      onModelChanged: _handleModelChanged,
+                      showLabel: false,
+                    ),
                   ),
                 ),
               ),

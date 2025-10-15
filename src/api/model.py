@@ -12,9 +12,22 @@ import urllib.request
 import urllib.error
 
 from fastapi import APIRouter, HTTPException, Request
+from pydantic import BaseModel
+
+from src.db.client import get_weaviate_client
 
 
 router = APIRouter(prefix="/models", tags=["models"])
+
+
+class ModelSelectRequest(BaseModel):
+    """Request body for model selection"""
+    provider: Optional[str] = None
+    model: str
+    # AWS Bedrock credentials (optional, required if provider is "bedrock")
+    aws_region: Optional[str] = None
+    aws_access_key_id: Optional[str] = None
+    aws_secret_access_key: Optional[str] = None
 
 
 def _env_models() -> List[Dict[str, str]]:
@@ -33,6 +46,9 @@ def _env_models() -> List[Dict[str, str]]:
 def _ollama_models() -> List[Dict[str, str]]:
     """Fetch available models from a local Ollama instance if reachable."""
     host = os.getenv("OLLAMA_HOST", "http://127.0.0.1:11434")
+    # Support both formats: "host:port" and "http://host:port"
+    if not host.startswith("http://") and not host.startswith("https://"):
+        host = f"http://{host}"
     url = f"{host.rstrip('/')}/api/tags"
     try:
         with urllib.request.urlopen(url, timeout=2) as resp:
@@ -44,7 +60,10 @@ def _ollama_models() -> List[Dict[str, str]]:
                 continue
             models.append({"id": f"ollama:{name}", "provider": "ollama", "name": name})
         return models
-    except Exception:
+    except Exception as e:
+        # Log the error for debugging
+        import logging
+        logging.getLogger(__name__).warning(f"Failed to fetch Ollama models from {host}: {e}")
         return []
 
 
@@ -73,7 +92,18 @@ def get_models(req: Request) -> Dict[str, Any]:
     if orch is not None:
         # Best-effort: expose provider:model if available from orchestrator config
         try:
-            provider = getattr(orch, "llm", None).__class__.__name__.lower()
+            llm_obj = getattr(orch, "llm", None)
+            if llm_obj:
+                class_name = llm_obj.__class__.__name__
+                # Map class names to provider names
+                if "ChatOllama" in class_name or "Ollama" in class_name:
+                    provider = "ollama"
+                elif "ChatOpenAI" in class_name or "OpenAI" in class_name:
+                    provider = "openai"
+                else:
+                    provider = class_name.replace("Chat", "").lower()
+            else:
+                provider = None
         except Exception:
             provider = None
         try:
@@ -87,21 +117,30 @@ def get_models(req: Request) -> Dict[str, Any]:
 
 
 @router.post("/select")
-def select_model(req: Request, provider: Optional[str] = None, model: str = "") -> Dict[str, Any]:
+def select_model(req: Request, body: ModelSelectRequest) -> Dict[str, Any]:
     """Select model and reset orchestrator.
 
     Args:
-        provider: e.g., "ollama", "openai". If omitted, inferred from model string like "ollama:gpt-oss:20b".
-        model: model name or full provider:model string.
+        body: Model selection request containing provider, model name, and optional AWS credentials.
     """
-    if not model:
+    if not body.model:
         raise HTTPException(status_code=400, detail="model is required")
 
     # Allow provider embedded in model (provider:model)
+    provider = body.provider
+    model = body.model
     if ":" in model and not provider:
         provider, model = model.split(":", 1)
 
     provider = provider or "ollama"
+
+    # Validate AWS credentials if provider is bedrock
+    if provider == "bedrock":
+        if not body.aws_region or not body.aws_access_key_id or not body.aws_secret_access_key:
+            raise HTTPException(
+                status_code=400,
+                detail="AWS credentials (aws_region, aws_access_key_id, aws_secret_access_key) are required for Bedrock provider"
+            )
 
     # Optionally validate against discovered models
     available_ids = {m["id"] for m in list_available_models()}
@@ -113,7 +152,18 @@ def select_model(req: Request, provider: Optional[str] = None, model: str = "") 
     # Recreate orchestrator with chosen provider/model
     try:
         from src.orchestrator.core.orchestrator import Orchestrator
-        req.app.state.orchestrator = Orchestrator(llm_type=provider, model_name=model)
+        
+        # Get Weaviate client for precedent search
+        weaviate_client = get_weaviate_client()
+        
+        req.app.state.orchestrator = Orchestrator(
+            llm_type=provider,
+            model_name=model,
+            weaviate_client=weaviate_client,
+            aws_region=body.aws_region,
+            aws_access_key_id=body.aws_access_key_id,
+            aws_secret_access_key=body.aws_secret_access_key,
+        )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to initialize orchestrator: {e}")
 

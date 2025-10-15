@@ -38,26 +38,26 @@ services:
     networks:
       - genesis-network
 
-  frontend:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile
-      target: deps  # Preinstall node_modules for dev
-    volumes:
-      # Mount source code for development
-      - ./frontend/src:/app/src
-      - ./frontend/public:/app/public
-      - ./frontend/package.json:/app/package.json
-      - ./frontend/next.config.ts:/app/next.config.ts
-      - ./frontend/tsconfig.json:/app/tsconfig.json
-      - ./frontend/postcss.config.mjs:/app/postcss.config.mjs
-    environment:
-      - NODE_ENV=development
-      - NEXT_PUBLIC_API_BASE=http://localhost:8000
-      # Enable polling so file changes from Windows bind mounts are detected
-      - WATCHPACK_POLLING=true
-      - WATCHPACK_POLLING_INTERVAL=300
-      - CHOKIDAR_USEPOLLING=true
-    ports:
-      - "3000:3000"
-    command: ["npm", "run", "dev", "--", "-H", "0.0.0.0", "-p", "3000"]
+  # frontend:
+  #   build:
+  #     context: ./frontend
+  #     dockerfile: Dockerfile
+  #     target: deps  # Preinstall node_modules for dev
+  #   volumes:
+  #     # Mount source code for development
+  #     - ./frontend/src:/app/src
+  #     - ./frontend/public:/app/public
+  #     - ./frontend/package.json:/app/package.json
+  #     - ./frontend/next.config.ts:/app/next.config.ts
+  #     - ./frontend/tsconfig.json:/app/tsconfig.json
+  #     - ./frontend/postcss.config.mjs:/app/postcss.config.mjs
+  #   environment:
+  #     - NODE_ENV=development
+  #     - NEXT_PUBLIC_API_BASE=http://localhost:8000
+  #     # Enable polling so file changes from Windows bind mounts are detected
+  #     - WATCHPACK_POLLING=true
+  #     - WATCHPACK_POLLING_INTERVAL=300
+  #     - CHOKIDAR_USEPOLLING=true
+  #   ports:
+  #     - "3000:3000"
+  #   command: ["npm", "run", "dev", "--", "-H", "0.0.0.0", "-p", "3000"]

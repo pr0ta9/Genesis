@@ -4,6 +4,7 @@ import 'widgets/chat/sidebar.dart';
 import 'widgets/chat_panel.dart';
 import 'widgets/execution_panel.dart';
 import 'widgets/common/resizable_divider.dart';
+import 'widgets/settings_page.dart';
 
 class Layout extends StatefulWidget {
   final Widget child;
@@ -28,6 +29,9 @@ class _LayoutState extends State<Layout> with SingleTickerProviderStateMixin {
   
   // Execution panel state
   Map<String, dynamic>? _selectedExecutionState;
+  
+  // Settings page state
+  bool _showSettingsPage = false;
 
   @override
   void initState() {
@@ -196,8 +200,44 @@ class _LayoutState extends State<Layout> with SingleTickerProviderStateMixin {
     }
   }
 
+  void _handleSettingsTap() {
+    setState(() {
+      _showSettingsPage = true;
+    });
+  }
+
+  void _handleBackFromSettings() {
+    setState(() {
+      _showSettingsPage = false;
+    });
+  }
+
+  void _handleNavigateToChat(String chatId) {
+    setState(() {
+      _showSettingsPage = false;
+      _selectedChatId = chatId;
+      // Clear execution selection when switching chats
+      _selectedExecutionState = null;
+      // Collapse execution panel since no summary card is clicked yet
+      _isExecutionPanelCollapsed = true;
+    });
+    
+    // Refresh sidebar to ensure the chat is loaded
+    _sidebarKey.currentState?.refreshChatList();
+  }
+
   @override
   Widget build(BuildContext context) {
+    // Show settings page without sidebar
+    if (_showSettingsPage) {
+      return Scaffold(
+        body: SettingsPage(
+          onBack: _handleBackFromSettings,
+          onNavigateToChat: _handleNavigateToChat,
+        ),
+      );
+    }
+
     return Scaffold(
       body: Row(
         children: [
@@ -223,6 +263,7 @@ class _LayoutState extends State<Layout> with SingleTickerProviderStateMixin {
                   onToggle: _toggleSidebar,
                   width: width,
                   onSelect: _handleSelectChat,
+                  onSettingsTap: _handleSettingsTap,
                 ),
               );
             },

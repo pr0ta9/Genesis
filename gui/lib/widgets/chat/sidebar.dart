@@ -11,6 +11,7 @@ class Sidebar extends StatefulWidget {
   final VoidCallback onToggle;
   final double? width;
   final void Function(String chatId)? onSelect;
+  final VoidCallback? onSettingsTap;
 
   const Sidebar({
     super.key,
@@ -18,6 +19,7 @@ class Sidebar extends StatefulWidget {
     required this.onToggle,
     this.width,
     this.onSelect,
+    this.onSettingsTap,
   });
 
   @override
@@ -282,7 +284,7 @@ class SidebarState extends State<Sidebar> {
                       child: Column(
                         children: [
                           Container(
-                            margin: const EdgeInsets.only(bottom: 16),
+                            margin: const EdgeInsets.only(bottom: 8),
                             child: InkWell(
                               onTap: _handleNewChat,
                               borderRadius: BorderRadius.circular(6),
@@ -310,6 +312,46 @@ class SidebarState extends State<Sidebar> {
                                     const SizedBox(width: 12),
                                     Text(
                                       'New Chat',
+                                      style: TextStyle(
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.w500,
+                                        color: Colors.grey.shade700,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                          Container(
+                            margin: const EdgeInsets.only(bottom: 16),
+                            child: InkWell(
+                              onTap: widget.onSettingsTap,
+                              borderRadius: BorderRadius.circular(6),
+                              child: Container(
+                                width: double.infinity,
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                  vertical: 8,
+                                ),
+                                decoration: BoxDecoration(
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: Row(
+                                  children: [
+                                    Container(
+                                      width: 20,
+                                      height: 20,
+                                      alignment: Alignment.center,
+                                      child: Icon(
+                                        Icons.settings_outlined,
+                                        size: 16,
+                                        color: Colors.grey.shade700,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 12),
+                                    Text(
+                                      'Settings',
                                       style: TextStyle(
                                         fontSize: 14,
                                         fontWeight: FontWeight.w500,
@@ -357,9 +399,15 @@ class SidebarState extends State<Sidebar> {
                                 else
                                   Expanded(
                                     child: _chats.isEmpty
-                                        ? const Padding(
-                                            padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                                            child: SelectableText('No conversations yet', style: TextStyle(fontSize: 12)),
+                                        ? Align(
+                                            alignment: Alignment.topLeft,
+                                            child: Padding(
+                                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                              child: SelectableText(
+                                                'No conversations yet',
+                                                style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                                              ),
+                                            ),
                                           )
                                         : ListView.builder(
                                             itemCount: _chats.length,
