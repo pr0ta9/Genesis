@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
+import 'dart:io';
 import 'package:gui/data/services/precedent_service.dart';
 
 // AWS Bedrock Model data
@@ -15,36 +16,62 @@ class BedrockModel {
 // Model region support based on AWS Bedrock documentation
 // Reference: https://docs.aws.amazon.com/bedrock/latest/userguide/models-supported.html
 const List<BedrockModel> bedrockModels = [
+  BedrockModel('anthropic.claude-opus-4-20250514-v1:0', 'Claude Opus 4', [
+    'us-east-1',
+    'us-west-2',
+    'ap-northeast-1',
+    'ap-southeast-2',
+    'eu-central-1',
+    'eu-west-1',
+    'eu-west-2',
+  ]),
   BedrockModel(
-    'anthropic.claude-opus-4-1-20250805-v1:0',
-    'Claude Opus 4.1',
-    ['us-east-1', 'us-west-2', 'ap-northeast-1', 'ap-southeast-2', 'eu-central-1', 'eu-west-1', 'eu-west-2'],
-  ),
-  BedrockModel(
-    'anthropic.claude-sonnet-4-5-20250929-v1:0',
+    'global.anthropic.claude-sonnet-4-5-20250929-v1:0',
     'Claude Sonnet 4.5',
-    ['us-east-1', 'us-west-2', 'ap-northeast-1', 'ap-southeast-1', 'ap-southeast-2', 'eu-central-1', 'eu-west-1', 'eu-west-2'],
+    [
+      'us-east-1',
+      'us-west-2',
+      'ap-northeast-1',
+      'ap-southeast-1',
+      'ap-southeast-2',
+      'eu-central-1',
+      'eu-west-1',
+      'eu-west-2',
+    ],
   ),
   BedrockModel(
-    'anthropic.claude-3-5-haiku-20241022-v1:0',
-    'Claude 3.5 Haiku',
-    ['us-east-1', 'us-west-2', 'ap-northeast-1', 'ap-southeast-1', 'ap-southeast-2', 'eu-central-1', 'eu-west-1', 'eu-west-2'],
+    'global.anthropic.claude-haiku-4-5-20251001-v1:0',
+    'Claude Haiku 4.5',
+    [
+      'us-east-1',
+      'us-west-2',
+      'ap-northeast-1',
+      'ap-southeast-1',
+      'ap-southeast-2',
+      'eu-central-1',
+      'eu-west-1',
+      'eu-west-2',
+    ],
   ),
-  BedrockModel(
-    'deepseek.r1-v1:0',
-    'DeepSeek-R1',
-    ['us-east-1', 'us-west-2'],
-  ),
-  BedrockModel(
-    'meta.llama3-3-70b-instruct-v1:0',
-    'Llama 3.3 70B Instruct',
-    ['us-east-1', 'us-west-2', 'ap-northeast-1', 'ap-south-1', 'ap-southeast-1', 'ap-southeast-2', 'ca-central-1', 'eu-central-1', 'eu-west-1', 'eu-west-2', 'eu-west-3', 'sa-east-1'],
-  ),
-  BedrockModel(
-    'openai.gpt-oss-120b-1:0',
-    'gpt-oss-120b',
-    ['us-east-1', 'us-west-2'],
-  ),
+  BedrockModel('deepseek.r1-v1:0', 'DeepSeek-R1', ['us-east-1', 'us-west-2']),
+  BedrockModel('meta.llama3-3-70b-instruct-v1:0', 'Llama 3.3 70B Instruct', [
+    'us-east-1',
+    'us-west-2',
+    'ap-northeast-1',
+    'ap-south-1',
+    'ap-southeast-1',
+    'ap-southeast-2',
+    'ca-central-1',
+    'eu-central-1',
+    'eu-west-1',
+    'eu-west-2',
+    'eu-west-3',
+    'sa-east-1',
+  ]),
+  BedrockModel('openai.gpt-oss-120b-1:0', 'gpt-oss-120b', [
+    'us-east-1',
+    'us-west-2',
+  ]),
 ];
 
 // AWS Region data
@@ -98,31 +125,25 @@ class SettingsPage extends StatefulWidget {
   final VoidCallback onBack;
   final Function(String chatId)? onNavigateToChat;
 
-  const SettingsPage({
-    super.key,
-    required this.onBack,
-    this.onNavigateToChat,
-  });
+  const SettingsPage({super.key, required this.onBack, this.onNavigateToChat});
 
   @override
   State<SettingsPage> createState() => _SettingsPageState();
 }
 
-enum SettingsTab {
-  general,
-  provider,
-  precedent,
-}
+enum SettingsTab { general, provider, precedent }
 
 class _SettingsPageState extends State<SettingsPage> {
   SettingsTab _selectedTab = SettingsTab.provider;
-  
+
   // Ollama settings
   final TextEditingController _ollamaPortController = TextEditingController();
-  
+
   // Bedrock settings
-  final TextEditingController _bedrockAccessKeyController = TextEditingController();
-  final TextEditingController _bedrockSecretKeyController = TextEditingController();
+  final TextEditingController _bedrockAccessKeyController =
+      TextEditingController();
+  final TextEditingController _bedrockSecretKeyController =
+      TextEditingController();
   String? _selectedAwsRegion;
   List<String> _selectedBedrockModels = [];
   bool _obscureSecretKey = true; // State for secret key visibility
@@ -136,16 +157,18 @@ class _SettingsPageState extends State<SettingsPage> {
   Future<void> _loadSettings() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      
+
       setState(() {
         // Load Ollama settings
         _ollamaPortController.text = prefs.getString('ollama_port') ?? '';
-        
+
         // Load Bedrock settings
-        _bedrockAccessKeyController.text = prefs.getString('bedrock_access_key') ?? '';
-        _bedrockSecretKeyController.text = prefs.getString('bedrock_secret_key') ?? '';
+        _bedrockAccessKeyController.text =
+            prefs.getString('bedrock_access_key') ?? '';
+        _bedrockSecretKeyController.text =
+            prefs.getString('bedrock_secret_key') ?? '';
         _selectedAwsRegion = prefs.getString('bedrock_region') ?? 'us-east-1';
-        
+
         // Load selected models (stored as JSON array)
         final modelsJson = prefs.getString('bedrock_models');
         if (modelsJson != null && modelsJson.isNotEmpty) {
@@ -155,7 +178,7 @@ class _SettingsPageState extends State<SettingsPage> {
           _selectedBedrockModels = [];
         }
       });
-      
+
       debugPrint('✅ Settings loaded from local storage');
     } catch (e) {
       debugPrint('❌ Error loading settings: $e');
@@ -244,11 +267,9 @@ class _SettingsPageState extends State<SettingsPage> {
               ],
             ),
           ),
-          
+
           // Right content area
-          Expanded(
-            child: _buildContent(),
-          ),
+          Expanded(child: _buildContent()),
         ],
       ),
     );
@@ -307,6 +328,11 @@ class _SettingsPageState extends State<SettingsPage> {
   }
 
   Widget _buildGeneralSettings() {
+    // Get the absolute path to outputs directory
+    final currentDir = Directory.current.path;
+    final separator = Platform.pathSeparator;
+    final outputsPath = '$currentDir${separator}outputs';
+
     return SingleChildScrollView(
       padding: const EdgeInsets.all(32),
       child: Center(
@@ -326,25 +352,128 @@ class _SettingsPageState extends State<SettingsPage> {
               const SizedBox(height: 8),
               Text(
                 'Configure general application preferences',
-                style: TextStyle(
-                  fontSize: 14,
-                  color: Colors.grey.shade600,
-                ),
+                style: TextStyle(fontSize: 14, color: Colors.grey.shade600),
               ),
               const SizedBox(height: 32),
-              // Add general settings here
-              Text(
-                'Coming soon...',
-                style: TextStyle(
-                  fontSize: 14,
-                  color: Colors.grey.shade500,
-                ),
-              ),
+
+              // Output Directory Section
+              _buildSectionHeader('Directories'),
+              const SizedBox(height: 16),
+              _buildOutputDirectorySetting(outputsPath),
             ],
           ),
         ),
       ),
     );
+  }
+
+  Widget _buildOutputDirectorySetting(String outputsPath) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Output Directory',
+          style: TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.w600,
+            color: Colors.grey.shade900,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          decoration: BoxDecoration(
+            color: Colors.grey.shade50,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: Colors.grey.shade300),
+          ),
+          child: Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      outputsPath,
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: Colors.grey.shade900,
+                        fontFamily: 'monospace',
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'All execution outputs are saved here',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.grey.shade600,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 12),
+              ElevatedButton.icon(
+                onPressed: () => _openOutputDirectory(outputsPath),
+                icon: const Icon(Icons.folder_open, size: 18),
+                label: const Text('Open'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.black,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 10,
+                  ),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Future<void> _openOutputDirectory(String directoryPath) async {
+    try {
+      // Check if directory exists
+      final directory = Directory(directoryPath);
+      if (!await directory.exists()) {
+        // Try to create it if it doesn't exist
+        await directory.create(recursive: true);
+      }
+
+      // Open directory in Windows Explorer
+      if (Platform.isWindows) {
+        await Process.run('explorer', [directoryPath]);
+      } else if (Platform.isMacOS) {
+        await Process.run('open', [directoryPath]);
+      } else if (Platform.isLinux) {
+        await Process.run('xdg-open', [directoryPath]);
+      }
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Opening output directory...'),
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+    } catch (e) {
+      debugPrint('❌ Error opening directory: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to open directory: $e'),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+    }
   }
 
   Widget _buildProviderSettings() {
@@ -367,13 +496,10 @@ class _SettingsPageState extends State<SettingsPage> {
               const SizedBox(height: 8),
               Text(
                 'Configure AI model providers',
-                style: TextStyle(
-                  fontSize: 14,
-                  color: Colors.grey.shade600,
-                ),
+                style: TextStyle(fontSize: 14, color: Colors.grey.shade600),
               ),
               const SizedBox(height: 32),
-              
+
               // Ollama Section
               _buildSectionHeader('Ollama'),
               const SizedBox(height: 16),
@@ -384,7 +510,7 @@ class _SettingsPageState extends State<SettingsPage> {
                 helperText: 'Port number for Ollama connection',
               ),
               const SizedBox(height: 32),
-              
+
               // Bedrock Section
               _buildSectionHeader('AWS Bedrock'),
               const SizedBox(height: 16),
@@ -430,7 +556,7 @@ class _SettingsPageState extends State<SettingsPage> {
               const SizedBox(height: 16),
               _buildModelMultiSelect(),
               const SizedBox(height: 32),
-              
+
               // Action buttons
               Row(
                 mainAxisAlignment: MainAxisAlignment.end,
@@ -441,7 +567,10 @@ class _SettingsPageState extends State<SettingsPage> {
                     style: OutlinedButton.styleFrom(
                       foregroundColor: Colors.grey.shade700,
                       side: BorderSide(color: Colors.grey.shade300),
-                      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 24,
+                        vertical: 12,
+                      ),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(8),
                       ),
@@ -461,7 +590,10 @@ class _SettingsPageState extends State<SettingsPage> {
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.black,
                       foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 24,
+                        vertical: 12,
+                      ),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(8),
                       ),
@@ -484,9 +616,7 @@ class _SettingsPageState extends State<SettingsPage> {
   }
 
   Widget _buildPrecedentSettings() {
-    return _PrecedentSettingsContent(
-      onNavigateToChat: widget.onNavigateToChat,
-    );
+    return _PrecedentSettingsContent(onNavigateToChat: widget.onNavigateToChat);
   }
 
   Widget _buildSectionHeader(String title) {
@@ -540,10 +670,7 @@ class _SettingsPageState extends State<SettingsPage> {
             hintText: placeholder,
             hintStyle: TextStyle(color: Colors.grey.shade400),
             helperText: helperText,
-            helperStyle: TextStyle(
-              fontSize: 12,
-              color: Colors.grey.shade600,
-            ),
+            helperStyle: TextStyle(fontSize: 12, color: Colors.grey.shade600),
             filled: true,
             fillColor: Colors.grey.shade50,
             border: OutlineInputBorder(
@@ -563,10 +690,7 @@ class _SettingsPageState extends State<SettingsPage> {
               vertical: 12,
             ),
           ),
-          style: TextStyle(
-            fontSize: 14,
-            color: Colors.grey.shade900,
-          ),
+          style: TextStyle(fontSize: 14, color: Colors.grey.shade900),
         ),
       ],
     );
@@ -611,7 +735,9 @@ class _SettingsPageState extends State<SettingsPage> {
             ),
             suffixIcon: IconButton(
               icon: Icon(
-                _obscureSecretKey ? Icons.visibility_outlined : Icons.visibility_off_outlined,
+                _obscureSecretKey
+                    ? Icons.visibility_outlined
+                    : Icons.visibility_off_outlined,
                 size: 20,
                 color: Colors.grey.shade600,
               ),
@@ -620,13 +746,12 @@ class _SettingsPageState extends State<SettingsPage> {
                   _obscureSecretKey = !_obscureSecretKey;
                 });
               },
-              tooltip: _obscureSecretKey ? 'Show secret key' : 'Hide secret key',
+              tooltip: _obscureSecretKey
+                  ? 'Show secret key'
+                  : 'Hide secret key',
             ),
           ),
-          style: TextStyle(
-            fontSize: 14,
-            color: Colors.grey.shade900,
-          ),
+          style: TextStyle(fontSize: 14, color: Colors.grey.shade900),
         ),
       ],
     );
@@ -636,18 +761,22 @@ class _SettingsPageState extends State<SettingsPage> {
   List<AWSRegion> _getRegionsWithModels() {
     return awsRegions.where((region) {
       // Check if any model supports this region
-      return bedrockModels.any((model) => model.supportedRegions.contains(region.code));
+      return bedrockModels.any(
+        (model) => model.supportedRegions.contains(region.code),
+      );
     }).toList();
   }
 
   // Helper method to count models available in a region
   int _getModelCountForRegion(String regionCode) {
-    return bedrockModels.where((model) => model.supportedRegions.contains(regionCode)).length;
+    return bedrockModels
+        .where((model) => model.supportedRegions.contains(regionCode))
+        .length;
   }
 
   Widget _buildRegionDropdown() {
     final availableRegions = _getRegionsWithModels();
-    
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -699,10 +828,7 @@ class _SettingsPageState extends State<SettingsPage> {
                   ),
                   Text(
                     '($modelCount ${modelCount == 1 ? 'model' : 'models'})',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: Colors.grey.shade600,
-                    ),
+                    style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
                   ),
                 ],
               ),
@@ -724,7 +850,8 @@ class _SettingsPageState extends State<SettingsPage> {
   Widget _buildModelMultiSelect() {
     // Filter models based on selected region
     final availableModels = bedrockModels.where((model) {
-      return _selectedAwsRegion != null && model.supportedRegions.contains(_selectedAwsRegion);
+      return _selectedAwsRegion != null &&
+          model.supportedRegions.contains(_selectedAwsRegion);
     }).toList();
 
     // Remove any selected models that are no longer available in the current region
@@ -748,10 +875,7 @@ class _SettingsPageState extends State<SettingsPage> {
             const SizedBox(width: 8),
             Text(
               '(${_selectedBedrockModels.length} selected)',
-              style: TextStyle(
-                fontSize: 12,
-                color: Colors.grey.shade600,
-              ),
+              style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
             ),
           ],
         ),
@@ -771,10 +895,7 @@ class _SettingsPageState extends State<SettingsPage> {
         else
           Text(
             '${availableModels.length} models available in this region',
-            style: TextStyle(
-              fontSize: 12,
-              color: Colors.grey.shade600,
-            ),
+            style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
           ),
         const SizedBox(height: 8),
         Container(
@@ -798,7 +919,9 @@ class _SettingsPageState extends State<SettingsPage> {
                 )
               : Column(
                   children: availableModels.map((model) {
-                    final isSelected = _selectedBedrockModels.contains(model.id);
+                    final isSelected = _selectedBedrockModels.contains(
+                      model.id,
+                    );
                     return InkWell(
                       onTap: () {
                         setState(() {
@@ -810,7 +933,10 @@ class _SettingsPageState extends State<SettingsPage> {
                         });
                       },
                       child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 12,
+                        ),
                         decoration: BoxDecoration(
                           border: Border(
                             bottom: model != availableModels.last
@@ -826,7 +952,9 @@ class _SettingsPageState extends State<SettingsPage> {
                               decoration: BoxDecoration(
                                 color: isSelected ? Colors.black : Colors.white,
                                 border: Border.all(
-                                  color: isSelected ? Colors.black : Colors.grey.shade400,
+                                  color: isSelected
+                                      ? Colors.black
+                                      : Colors.grey.shade400,
                                   width: 2,
                                 ),
                                 borderRadius: BorderRadius.circular(4),
@@ -846,7 +974,9 @@ class _SettingsPageState extends State<SettingsPage> {
                                 style: TextStyle(
                                   fontSize: 14,
                                   color: Colors.grey.shade900,
-                                  fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+                                  fontWeight: isSelected
+                                      ? FontWeight.w600
+                                      : FontWeight.normal,
                                 ),
                               ),
                             ),
@@ -901,42 +1031,48 @@ class _SettingsPageState extends State<SettingsPage> {
 
     try {
       final prefs = await SharedPreferences.getInstance();
-      
+
       // Save Ollama settings
       if (ollamaPort.isNotEmpty) {
         await prefs.setString('ollama_port', ollamaPort);
       } else {
         await prefs.remove('ollama_port');
       }
-      
+
       // Save Bedrock settings
       if (accessKey.isNotEmpty) {
         await prefs.setString('bedrock_access_key', accessKey);
       } else {
         await prefs.remove('bedrock_access_key');
       }
-      
+
       if (secretKey.isNotEmpty) {
         await prefs.setString('bedrock_secret_key', secretKey);
       } else {
         await prefs.remove('bedrock_secret_key');
       }
-      
+
       if (region != null) {
         await prefs.setString('bedrock_region', region);
       }
-      
+
       // Save selected models as JSON array
       if (models.isNotEmpty) {
         await prefs.setString('bedrock_models', jsonEncode(models));
       } else {
         await prefs.remove('bedrock_models');
       }
-      
+
       debugPrint('💾 Settings saved to local storage:');
-      debugPrint('  Ollama Port: ${ollamaPort.isEmpty ? "11434 (default)" : ollamaPort}');
-      debugPrint('  Bedrock Access Key: ${accessKey.isNotEmpty ? "[SET]" : "[NOT SET]"}');
-      debugPrint('  Bedrock Secret Key: ${secretKey.isNotEmpty ? "[SET]" : "[NOT SET]"}');
+      debugPrint(
+        '  Ollama Port: ${ollamaPort.isEmpty ? "11434 (default)" : ollamaPort}',
+      );
+      debugPrint(
+        '  Bedrock Access Key: ${accessKey.isNotEmpty ? "[SET]" : "[NOT SET]"}',
+      );
+      debugPrint(
+        '  Bedrock Secret Key: ${secretKey.isNotEmpty ? "[SET]" : "[NOT SET]"}',
+      );
       debugPrint('  AWS Region: $region');
       debugPrint('  Bedrock Models (${models.length}): $models');
 
@@ -944,7 +1080,9 @@ class _SettingsPageState extends State<SettingsPage> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Provider settings saved successfully (${models.length} models selected)'),
+            content: Text(
+              'Provider settings saved successfully (${models.length} models selected)',
+            ),
             backgroundColor: Colors.green,
             duration: const Duration(seconds: 2),
           ),
@@ -969,13 +1107,12 @@ class _SettingsPageState extends State<SettingsPage> {
 class _PrecedentSettingsContent extends StatefulWidget {
   final Function(String chatId)? onNavigateToChat;
 
-  const _PrecedentSettingsContent({
-    Key? key,
-    this.onNavigateToChat,
-  }) : super(key: key);
+  const _PrecedentSettingsContent({Key? key, this.onNavigateToChat})
+    : super(key: key);
 
   @override
-  State<_PrecedentSettingsContent> createState() => _PrecedentSettingsContentState();
+  State<_PrecedentSettingsContent> createState() =>
+      _PrecedentSettingsContentState();
 }
 
 class _PrecedentSettingsContentState extends State<_PrecedentSettingsContent> {
@@ -1018,7 +1155,8 @@ class _PrecedentSettingsContentState extends State<_PrecedentSettingsContent> {
     // Show confirmation dialog
     final confirmed = await _showConfirmationDialog(
       title: 'Delete Selected Precedents',
-      message: 'Are you sure you want to delete ${_selectedUuids.length} selected precedent(s)? This action cannot be undone.',
+      message:
+          'Are you sure you want to delete ${_selectedUuids.length} selected precedent(s)? This action cannot be undone.',
     );
 
     if (!confirmed) return;
@@ -1033,7 +1171,9 @@ class _PrecedentSettingsContentState extends State<_PrecedentSettingsContent> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Deleted ${_selectedUuids.length} precedent(s) successfully'),
+            content: Text(
+              'Deleted ${_selectedUuids.length} precedent(s) successfully',
+            ),
             backgroundColor: Colors.green,
             duration: const Duration(seconds: 2),
           ),
@@ -1054,7 +1194,8 @@ class _PrecedentSettingsContentState extends State<_PrecedentSettingsContent> {
     // Show confirmation dialog
     final confirmed = await _showConfirmationDialog(
       title: 'Delete All Precedents',
-      message: 'Are you sure you want to delete ALL ${_precedents.length} precedents? This action cannot be undone.',
+      message:
+          'Are you sure you want to delete ALL ${_precedents.length} precedents? This action cannot be undone.',
       isDangerous: true,
     );
 
@@ -1095,9 +1236,7 @@ class _PrecedentSettingsContentState extends State<_PrecedentSettingsContent> {
       barrierColor: Colors.black54,
       builder: (context) => AlertDialog(
         backgroundColor: Colors.white,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         title: Text(
           title,
           style: TextStyle(
@@ -1105,24 +1244,19 @@ class _PrecedentSettingsContentState extends State<_PrecedentSettingsContent> {
             fontWeight: FontWeight.w600,
           ),
         ),
-        content: Text(
-          message,
-          style: TextStyle(
-            color: Colors.grey.shade700,
-          ),
-        ),
+        content: Text(message, style: TextStyle(color: Colors.grey.shade700)),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
-            style: TextButton.styleFrom(
-              foregroundColor: Colors.grey.shade700,
-            ),
+            style: TextButton.styleFrom(foregroundColor: Colors.grey.shade700),
             child: const Text('Cancel'),
           ),
           ElevatedButton(
             onPressed: () => Navigator.of(context).pop(true),
             style: ElevatedButton.styleFrom(
-              backgroundColor: isDangerous ? Colors.grey.shade900 : Colors.black,
+              backgroundColor: isDangerous
+                  ? Colors.grey.shade900
+                  : Colors.black,
               foregroundColor: Colors.white,
             ),
             child: const Text('Delete'),
@@ -1139,9 +1273,7 @@ class _PrecedentSettingsContentState extends State<_PrecedentSettingsContent> {
       barrierColor: Colors.black54,
       builder: (context) => Dialog(
         backgroundColor: Colors.white,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         child: Container(
           width: 600,
           padding: const EdgeInsets.all(32),
@@ -1173,13 +1305,10 @@ class _PrecedentSettingsContentState extends State<_PrecedentSettingsContent> {
               const SizedBox(height: 8),
               Text(
                 objective,
-                style: TextStyle(
-                  fontSize: 14,
-                  color: Colors.grey.shade600,
-                ),
+                style: TextStyle(fontSize: 14, color: Colors.grey.shade600),
               ),
               const SizedBox(height: 24),
-              
+
               // Path visualization
               if (path == null || path.isEmpty)
                 Container(
@@ -1202,12 +1331,16 @@ class _PrecedentSettingsContentState extends State<_PrecedentSettingsContent> {
                     child: Column(
                       children: [
                         for (int i = 0; i < path.length; i++)
-                          _buildPathStep(i + 1, path[i] as Map<String, dynamic>, i == path.length - 1),
+                          _buildPathStep(
+                            i + 1,
+                            path[i] as Map<String, dynamic>,
+                            i == path.length - 1,
+                          ),
                       ],
                     ),
                   ),
                 ),
-              
+
               const SizedBox(height: 24),
               Align(
                 alignment: Alignment.centerRight,
@@ -1226,20 +1359,26 @@ class _PrecedentSettingsContentState extends State<_PrecedentSettingsContent> {
     );
   }
 
-  Widget _buildPathStep(int stepNumber, Map<String, dynamic> step, bool isLast) {
+  Widget _buildPathStep(
+    int stepNumber,
+    Map<String, dynamic> step,
+    bool isLast,
+  ) {
     final name = step['name']?.toString() ?? 'Unknown';
     String description = step['description']?.toString() ?? '';
-    
+
     // Extract only the description part (before "Args:")
     if (description.contains('Args:')) {
-      description = description.substring(0, description.indexOf('Args:')).trim();
+      description = description
+          .substring(0, description.indexOf('Args:'))
+          .trim();
     }
     // Also handle other common parameter section markers
     if (description.contains('\n\n')) {
       // Take only the first paragraph (usually the main description)
       description = description.split('\n\n').first.trim();
     }
-    
+
     return Column(
       children: [
         Row(
@@ -1296,11 +1435,7 @@ class _PrecedentSettingsContentState extends State<_PrecedentSettingsContent> {
         if (!isLast)
           Padding(
             padding: const EdgeInsets.only(left: 15),
-            child: Container(
-              width: 2,
-              height: 32,
-              color: Colors.grey.shade300,
-            ),
+            child: Container(width: 2, height: 32, color: Colors.grey.shade300),
           ),
       ],
     );
@@ -1308,7 +1443,7 @@ class _PrecedentSettingsContentState extends State<_PrecedentSettingsContent> {
 
   void _navigateToChat(String? chatId) {
     if (chatId == null) return;
-    
+
     if (widget.onNavigateToChat != null) {
       widget.onNavigateToChat!(chatId);
     } else {
@@ -1406,14 +1541,19 @@ class _PrecedentSettingsContentState extends State<_PrecedentSettingsContent> {
                 Row(
                   children: [
                     ElevatedButton.icon(
-                      onPressed: _selectedUuids.isEmpty ? null : _deleteSelected,
+                      onPressed: _selectedUuids.isEmpty
+                          ? null
+                          : _deleteSelected,
                       icon: const Icon(Icons.delete_outline, size: 18),
                       label: Text('Delete Selected (${_selectedUuids.length})'),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: Colors.orange,
                         foregroundColor: Colors.white,
                         disabledBackgroundColor: Colors.grey.shade300,
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 12,
+                        ),
                       ),
                     ),
                     const SizedBox(width: 12),
@@ -1424,7 +1564,10 @@ class _PrecedentSettingsContentState extends State<_PrecedentSettingsContent> {
                       style: OutlinedButton.styleFrom(
                         foregroundColor: Colors.red,
                         side: BorderSide(color: Colors.red.shade300),
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 12,
+                        ),
                       ),
                     ),
                   ],
@@ -1454,7 +1597,11 @@ class _PrecedentSettingsContentState extends State<_PrecedentSettingsContent> {
                     child: Center(
                       child: Column(
                         children: [
-                          Icon(Icons.history, size: 48, color: Colors.grey.shade400),
+                          Icon(
+                            Icons.history,
+                            size: 48,
+                            color: Colors.grey.shade400,
+                          ),
                           const SizedBox(height: 16),
                           Text(
                             'No precedents saved yet',
@@ -1478,15 +1625,16 @@ class _PrecedentSettingsContentState extends State<_PrecedentSettingsContent> {
                       shrinkWrap: true,
                       physics: const NeverScrollableScrollPhysics(),
                       itemCount: _precedents.length,
-                      separatorBuilder: (context, index) => Divider(
-                        height: 1,
-                        color: Colors.grey.shade200,
-                      ),
+                      separatorBuilder: (context, index) =>
+                          Divider(height: 1, color: Colors.grey.shade200),
                       itemBuilder: (context, index) {
                         final precedent = _precedents[index];
                         final uuid = precedent['uuid'] as String;
-                        final properties = precedent['properties'] as Map<String, dynamic>?;
-                        final objective = properties?['objective']?.toString() ?? 'Unknown objective';
+                        final properties =
+                            precedent['properties'] as Map<String, dynamic>?;
+                        final objective =
+                            properties?['objective']?.toString() ??
+                            'Unknown objective';
                         final path = properties?['path'] as List<dynamic>?;
                         final chatId = precedent['chat_id'] as String?;
                         final isSelected = _selectedUuids.contains(uuid);
@@ -1510,9 +1658,13 @@ class _PrecedentSettingsContentState extends State<_PrecedentSettingsContent> {
                                   width: 20,
                                   height: 20,
                                   decoration: BoxDecoration(
-                                    color: isSelected ? Colors.black : Colors.white,
+                                    color: isSelected
+                                        ? Colors.black
+                                        : Colors.white,
                                     border: Border.all(
-                                      color: isSelected ? Colors.black : Colors.grey.shade400,
+                                      color: isSelected
+                                          ? Colors.black
+                                          : Colors.grey.shade400,
                                       width: 2,
                                     ),
                                     borderRadius: BorderRadius.circular(4),
@@ -1529,7 +1681,8 @@ class _PrecedentSettingsContentState extends State<_PrecedentSettingsContent> {
                                 // Content
                                 Expanded(
                                   child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
                                     children: [
                                       Text(
                                         objective,
@@ -1555,7 +1708,10 @@ class _PrecedentSettingsContentState extends State<_PrecedentSettingsContent> {
                                 ),
                                 // Three-dot menu
                                 PopupMenuButton<String>(
-                                  icon: Icon(Icons.more_vert, color: Colors.grey.shade600),
+                                  icon: Icon(
+                                    Icons.more_vert,
+                                    color: Colors.grey.shade600,
+                                  ),
                                   tooltip: 'More options',
                                   onSelected: (value) {
                                     if (value == 'view_path') {
@@ -1580,7 +1736,10 @@ class _PrecedentSettingsContentState extends State<_PrecedentSettingsContent> {
                                         value: 'go_to_chat',
                                         child: Row(
                                           children: [
-                                            Icon(Icons.chat_bubble_outline, size: 18),
+                                            Icon(
+                                              Icons.chat_bubble_outline,
+                                              size: 18,
+                                            ),
                                             SizedBox(width: 12),
                                             Text('Go to Chat'),
                                           ],
@@ -1596,9 +1755,9 @@ class _PrecedentSettingsContentState extends State<_PrecedentSettingsContent> {
                     ),
                   ),
               ],
-          ],
+            ],
+          ),
         ),
-      ),
       ),
     );
   }

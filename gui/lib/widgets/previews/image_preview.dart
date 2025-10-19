@@ -22,13 +22,151 @@ class ImagePreview extends StatefulWidget {
   State<ImagePreview> createState() => _ImagePreviewState();
 }
 
+/// Modal dialog that shows the full-size image with semi-transparent background
+class ImageModal extends StatelessWidget {
+  final ImageProvider imageProvider;
+  final String filename;
+
+  const ImageModal({
+    super.key,
+    required this.imageProvider,
+    required this.filename,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.black.withValues(alpha: 0.5), // 50% opacity grey/black background
+      child: Stack(
+        children: [
+          // Tap anywhere to close
+          GestureDetector(
+            onTap: () => Navigator.of(context).pop(),
+            child: Container(
+              color: Colors.transparent,
+              width: double.infinity,
+              height: double.infinity,
+            ),
+          ),
+          // Centered image
+          Center(
+            child: GestureDetector(
+              onTap: () {}, // Prevent closing when tapping the image itself
+              child: Container(
+                constraints: BoxConstraints(
+                  maxWidth: MediaQuery.of(context).size.width * 0.9,
+                  maxHeight: MediaQuery.of(context).size.height * 0.9,
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // Close button
+                    Align(
+                      alignment: Alignment.topRight,
+                      child: Padding(
+                        padding: const EdgeInsets.only(bottom: 8),
+                        child: IconButton(
+                          icon: const Icon(Icons.close, color: Colors.white, size: 32),
+                          onPressed: () => Navigator.of(context).pop(),
+                          tooltip: 'Close',
+                        ),
+                      ),
+                    ),
+                    // Image with white background
+                    Flexible(
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(8),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withValues(alpha: 0.3),
+                              blurRadius: 20,
+                              spreadRadius: 5,
+                            ),
+                          ],
+                        ),
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(8),
+                          child: Image(
+                            image: imageProvider,
+                            fit: BoxFit.contain,
+                            errorBuilder: (context, error, stackTrace) {
+                              return Container(
+                                padding: const EdgeInsets.all(40),
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    const Icon(
+                                      Icons.broken_image,
+                                      size: 64,
+                                      color: Colors.grey,
+                                    ),
+                                    const SizedBox(height: 16),
+                                    Text(
+                                      'Failed to load image',
+                                      style: TextStyle(
+                                        color: Colors.grey.shade700,
+                                        fontSize: 16,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              );
+                            },
+                          ),
+                        ),
+                      ),
+                    ),
+                    // Filename at the bottom
+                    Padding(
+                      padding: const EdgeInsets.only(top: 8),
+                      child: Text(
+                        filename,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w500,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _ImagePreviewState extends State<ImagePreview> {
   bool _hasError = false;
+
+  void _handleTap() {
+    if (widget.onTap != null) {
+      // If a custom onTap is provided, use it
+      widget.onTap!();
+    } else if (!_hasError) {
+      // Otherwise, show the image modal
+      showDialog(
+        context: context,
+        barrierColor: Colors.transparent, // We handle the background in ImageModal
+        builder: (context) => ImageModal(
+          imageProvider: _getImageProvider(),
+          filename: widget.attachment.filename,
+        ),
+      );
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
-      onTap: widget.onTap,
+      onTap: _handleTap,
       child: Container(
         constraints: BoxConstraints(
           maxHeight: widget.isCompact ? 100 : 200,

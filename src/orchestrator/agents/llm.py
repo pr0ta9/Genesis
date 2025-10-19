@@ -20,7 +20,7 @@ def setup_llm(
     #         max_retries=2,
     #     )
     if type == "ollama":
-        return ChatOllama(
+        llm = ChatOllama(
             model=model_name,
             temperature=temperature,
             num_ctx=16384,
@@ -31,15 +31,23 @@ def setup_llm(
     elif type == "bedrock":
         if not aws_region or not aws_access_key_id or not aws_secret_access_key:
             raise ValueError("AWS credentials not provided. Please provide aws_region, aws_access_key_id, and aws_secret_access_key parameters.")
-        
-        return ChatBedrockConverse(
+        thinking_params= {
+            "thinking": {
+                "type": "enabled",
+                "budget_tokens": 2000
+            }
+        }
+        llm = ChatBedrockConverse(
             model=model_name,
-            temperature=temperature,
+            temperature=1,
             max_tokens=None,
             region_name=aws_region,
             aws_access_key_id=aws_access_key_id,
             aws_secret_access_key=aws_secret_access_key,
+            additional_model_request_fields=thinking_params,
         )
     else:
         raise ValueError(f"Model {type} not supported")
-
+    llm._provider_type = type
+    llm._model_name = model_name
+    return llm

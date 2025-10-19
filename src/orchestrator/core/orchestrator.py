@@ -85,6 +85,9 @@ class Orchestrator:
         # Node definitions
         # -----------------
         def precedent_node(state: State) -> Dict[str, Any]:
+            from datetime import datetime
+            enter_time = datetime.now()
+            print(f"⏱️ [PRECEDENT NODE] Entering at {enter_time.strftime('%H:%M:%S.%f')[:-3]}")
             self.logger.info("🔍 [ORCHESTRATOR] Entering precedent_node state")
             
             # Extract user query from messages
@@ -183,15 +186,29 @@ class Orchestrator:
             result["precedents_found"] = precedents
             print(f"💾 [ORCHESTRATOR] Added {len(precedents)} precedents to state")
             
+            exit_time = datetime.now()
+            duration = (exit_time - enter_time).total_seconds()
+            print(f"⏱️ [PRECEDENT NODE] Returning at {exit_time.strftime('%H:%M:%S.%f')[:-3]} (duration: {duration:.3f}s)")
+            print(f"⏱️ [PRECEDENT NODE] Returning data with keys: {list(result.keys())}, next_node={result.get('next_node')}")
             return result
         
         def classify_node(state: State) -> Dict[str, Any]:
+            from datetime import datetime
+            enter_time = datetime.now()
+            print(f"⏱️ [CLASSIFY NODE] Entering at {enter_time.strftime('%H:%M:%S.%f')[:-3]}")
             self.logger.info("Entering state: classify")
             self.logger.debug("State messages before classify:\n%s", format_messages(state.get("messages", [])))
             result = self.classifier.classify(state)
+            exit_time = datetime.now()
+            duration = (exit_time - enter_time).total_seconds()
+            print(f"⏱️ [CLASSIFY NODE] Returning at {exit_time.strftime('%H:%M:%S.%f')[:-3]} (duration: {duration:.3f}s)")
+            print(f"⏱️ [CLASSIFY NODE] Returning data with keys: {list(result.keys())}, next_node={result.get('next_node')}")
             return result
 
         def find_path_node(state: State) -> Dict[str, Any]:
+            from datetime import datetime
+            enter_time = datetime.now()
+            print(f"⏱️ [FIND_PATH NODE] Entering at {enter_time.strftime('%H:%M:%S.%f')[:-3]}")
             self.logger.info("Entering state: find_path")
             input_enum = state.get("input_type")
             # Prefer the latest savepoint for the target type if present
@@ -236,17 +253,31 @@ class Orchestrator:
                 "node": "find_path",
             }
             
+            exit_time = datetime.now()
+            duration = (exit_time - enter_time).total_seconds()
+            print(f"⏱️ [FIND_PATH NODE] Returning at {exit_time.strftime('%H:%M:%S.%f')[:-3]} (duration: {duration:.3f}s)")
+            print(f"⏱️ [FIND_PATH NODE] Returning data with keys: {list(result.keys())}, next_node={result.get('next_node')}")
             return result
 
         def route_node(state: State) -> Dict[str, Any]:
+            from datetime import datetime
+            enter_time = datetime.now()
+            print(f"⏱️ [ROUTE NODE] Entering at {enter_time.strftime('%H:%M:%S.%f')[:-3]}")
             self.logger.info("Entering state: route")
             self.logger.debug("Messages before route:\n%s", format_messages(state.get("messages", [])))
             result = self.router.route(state)
             print(f"[ORCHESTRATOR DEBUG] route_node result next_node: {result.get('next_node')}")
-            print(f"[ORCHESTRATOR DEBUG] route_node result chosen_path length: {len(result.get('chosen_path', []))}")            
+            print(f"[ORCHESTRATOR DEBUG] route_node result chosen_path length: {len(result.get('chosen_path', []))}")
+            exit_time = datetime.now()
+            duration = (exit_time - enter_time).total_seconds()
+            print(f"⏱️ [ROUTE NODE] Returning at {exit_time.strftime('%H:%M:%S.%f')[:-3]} (duration: {duration:.3f}s)")
+            print(f"⏱️ [ROUTE NODE] Returning data with keys: {list(result.keys())}, next_node={result.get('next_node')}")
             return result
 
         def execute_node(state: State) -> Dict[str, Any]:
+            from datetime import datetime
+            enter_time = datetime.now()
+            print(f"⏱️ [EXECUTE NODE] Entering at {enter_time.strftime('%H:%M:%S.%f')[:-3]}")
             self.logger.info("Entering state: execute")
             chosen_path: List[PathItem] = state.get("chosen_path", [])
             log_section(self.logger, "execute chosen path", chosen_path, level=logging.INFO)
@@ -294,11 +325,22 @@ class Orchestrator:
                 output_dir = str(Path(final_output).parent)
                 execution_dict["execution_output_path"] = output_dir
             
+            exit_time = datetime.now()
+            duration = (exit_time - enter_time).total_seconds()
+            print(f"⏱️ [EXECUTE NODE] Returning at {exit_time.strftime('%H:%M:%S.%f')[:-3]} (duration: {duration:.3f}s)")
+            print(f"⏱️ [EXECUTE NODE] Returning data with keys: {list(execution_dict.keys())}, next_node={execution_dict.get('next_node')}")
             return execution_dict
 
         def finalize_node(state: State) -> Dict[str, Any]:
+            from datetime import datetime
+            enter_time = datetime.now()
+            print(f"⏱️ [FINALIZE NODE] Entering at {enter_time.strftime('%H:%M:%S.%f')[:-3]}")
             self.logger.info("Entering state: finalize")
             result = self.finalizer.finalize(state)
+            exit_time = datetime.now()
+            duration = (exit_time - enter_time).total_seconds()
+            print(f"⏱️ [FINALIZE NODE] Returning at {exit_time.strftime('%H:%M:%S.%f')[:-3]} (duration: {duration:.3f}s)")
+            print(f"⏱️ [FINALIZE NODE] Returning data with keys: {list(result.keys())}, next_node={result.get('next_node', 'END')}")
             return result
         
         def feedback_node(state: State) -> Dict[str, Any]:

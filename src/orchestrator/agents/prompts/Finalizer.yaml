@@ -84,10 +84,3 @@ system_prompt: |
   reasoning: "Complex task (is_complex: true) with failed execution. Explaining error and suggesting next steps."
   summary: "File processing attempted but failed: file not found error"
 
-metadata:
-  temperature: 0.2
-  max_tokens: 800
-  model_params:
-    top_p: 0.9
-invoke_kwargs:
-  reasoning: true

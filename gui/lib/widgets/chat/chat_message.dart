@@ -11,7 +11,7 @@ class ChatMessage extends StatefulWidget {
   final String? chatId;
   final bool isPrecedentSaved;
   final Future<bool> Function()? onSavePrecedent;
-  
+
   const ChatMessage({
     super.key,
     required this.text,
@@ -36,7 +36,7 @@ class _ChatMessageState extends State<ChatMessage> {
     if (widget.isUser) {
       return widget.text;
     }
-    
+
     // For assistant messages, replace <file>full/path/filename.ext</file> with just filename.ext
     return widget.text.replaceAllMapped(
       RegExp(r'<file>(.*?)<\/file>', caseSensitive: false),
@@ -57,57 +57,74 @@ class _ChatMessageState extends State<ChatMessage> {
     // For assistant messages, replace <file> paths with just filename
     List<FileAttachment> allAttachments = [];
     String displayText = _getFormattedText();
-    
+
     // Add any direct attachments (these will be shown as previews)
     if (widget.attachments != null && widget.attachments!.isNotEmpty) {
       allAttachments.addAll(widget.attachments!);
     }
-    
+
     final hasAttachments = allAttachments.isNotEmpty;
     final hasText = displayText.trim().isNotEmpty;
-    
+
     return Row(
-      mainAxisAlignment: widget.isUser ? MainAxisAlignment.end : MainAxisAlignment.start,
+      mainAxisAlignment: widget.isUser
+          ? MainAxisAlignment.end
+          : MainAxisAlignment.start,
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Flexible(
           child: Container(
             constraints: const BoxConstraints(maxWidth: 650),
             child: Column(
-              crossAxisAlignment: widget.isUser ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+              crossAxisAlignment: widget.isUser
+                  ? CrossAxisAlignment.end
+                  : CrossAxisAlignment.start,
               children: [
                 // File attachments
                 if (hasAttachments) ...[
                   Container(
-                    margin: EdgeInsets.only(
-                      bottom: hasText ? 8 : 0,
-                    ),
+                    margin: EdgeInsets.only(bottom: hasText ? 8 : 0),
                     child: Wrap(
                       spacing: 8,
                       runSpacing: 8,
-                      children: allAttachments.map((attachment) => 
-                        FilePreview(
-                          attachment: attachment,
-                          isCompact: false,
-                          onTap: () => _openFile(context, attachment),
-                        )
-                      ).toList(),
+                      children: allAttachments
+                          .map(
+                            (attachment) => FilePreview(
+                              attachment: attachment,
+                              isCompact: false,
+                              // Don't pass onTap for images - let ImagePreview handle its own modal
+                              // For other files, use custom handler
+                              onTap: attachment.isImage
+                                  ? null
+                                  : () => _openFile(context, attachment),
+                            ),
+                          )
+                          .toList(),
                     ),
                   ),
                 ],
-                
+
                 // Text content with underlined filenames
                 if (hasText)
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 12,
+                    ),
                     decoration: BoxDecoration(
-                      color: widget.isUser ? Colors.grey.shade100 : Colors.transparent,
+                      color: widget.isUser
+                          ? Colors.grey.shade100
+                          : Colors.transparent,
                       borderRadius: BorderRadius.circular(16),
                     ),
                     child: SelectableText.rich(
                       TextSpan(
                         children: [
-                          ..._buildTextSpansWithUnderlinedFiles(displayText, widget.text, widget.isUser),
+                          ..._buildTextSpansWithUnderlinedFiles(
+                            displayText,
+                            widget.text,
+                            widget.isUser,
+                          ),
                           if (widget.isStreaming && !widget.isUser)
                             const TextSpan(
                               text: '▌',
@@ -120,9 +137,11 @@ class _ChatMessageState extends State<ChatMessage> {
                       ),
                     ),
                   ),
-                
+
                 // Action buttons for assistant messages (only show if has meaningful content)
-                if (!widget.isUser && !widget.isStreaming && widget.text.trim().isNotEmpty)
+                if (!widget.isUser &&
+                    !widget.isStreaming &&
+                    widget.text.trim().isNotEmpty)
                   Padding(
                     padding: const EdgeInsets.only(top: 8),
                     child: Row(
@@ -141,7 +160,7 @@ class _ChatMessageState extends State<ChatMessage> {
       ],
     );
   }
-  
+
   Widget _buildCopyButton() {
     return InkWell(
       onTap: _handleCopy,
@@ -161,7 +180,7 @@ class _ChatMessageState extends State<ChatMessage> {
       ),
     );
   }
-  
+
   Widget _buildThumbsUpButton() {
     // Disable interaction during loading
     if (_isSavingPrecedent) {
@@ -184,7 +203,7 @@ class _ChatMessageState extends State<ChatMessage> {
         ),
       );
     }
-    
+
     // Both saved and unsaved states are clickable
     return InkWell(
       onTap: _handleSavePrecedent,
@@ -208,12 +227,12 @@ class _ChatMessageState extends State<ChatMessage> {
       ),
     );
   }
-  
+
   Future<void> _handleSavePrecedent() async {
     if (widget.onSavePrecedent == null) return;
-    
+
     setState(() => _isSavingPrecedent = true);
-    
+
     try {
       final success = await widget.onSavePrecedent!();
       if (mounted && success) {
@@ -236,7 +255,7 @@ class _ChatMessageState extends State<ChatMessage> {
       }
     }
   }
-  
+
   Future<void> _handleCopy() async {
     try {
       // Copy the formatted text (with <file> tags replaced by filenames)
@@ -251,9 +270,13 @@ class _ChatMessageState extends State<ChatMessage> {
       // Silently fail
     }
   }
-  
+
   /// Build TextSpans with underlined filenames for <file> tags
-  List<TextSpan> _buildTextSpansWithUnderlinedFiles(String displayText, String originalText, bool isUser) {
+  List<TextSpan> _buildTextSpansWithUnderlinedFiles(
+    String displayText,
+    String originalText,
+    bool isUser,
+  ) {
     if (isUser) {
       // User messages don't have file tags
       return [
@@ -267,11 +290,11 @@ class _ChatMessageState extends State<ChatMessage> {
         ),
       ];
     }
-    
+
     final List<TextSpan> spans = [];
     final fileRegex = RegExp(r'<file>(.*?)<\/file>', caseSensitive: false);
     final matches = fileRegex.allMatches(originalText).toList();
-    
+
     if (matches.isEmpty) {
       // No file tags, return simple span
       return [
@@ -285,57 +308,63 @@ class _ChatMessageState extends State<ChatMessage> {
         ),
       ];
     }
-    
+
     int currentIndex = 0;
-    
+
     for (final match in matches) {
       // Add text before the file tag
       if (match.start > currentIndex) {
         final beforeText = originalText.substring(currentIndex, match.start);
-        spans.add(TextSpan(
-          text: beforeText,
-          style: const TextStyle(
-            fontSize: 16,
-            height: 1.5,
-            color: Colors.black87,
+        spans.add(
+          TextSpan(
+            text: beforeText,
+            style: const TextStyle(
+              fontSize: 16,
+              height: 1.5,
+              color: Colors.black87,
+            ),
           ),
-        ));
+        );
       }
-      
+
       // Add underlined filename
       final fullPath = match.group(1)?.trim() ?? '';
       if (fullPath.isNotEmpty) {
         final filename = fullPath.split('/').last;
-        spans.add(TextSpan(
-          text: filename,
+        spans.add(
+          TextSpan(
+            text: filename,
+            style: const TextStyle(
+              fontSize: 16,
+              height: 1.5,
+              color: Colors.black87,
+              decoration: TextDecoration.underline,
+            ),
+          ),
+        );
+      }
+
+      currentIndex = match.end;
+    }
+
+    // Add remaining text after last file tag
+    if (currentIndex < originalText.length) {
+      final afterText = originalText.substring(currentIndex);
+      spans.add(
+        TextSpan(
+          text: afterText,
           style: const TextStyle(
             fontSize: 16,
             height: 1.5,
             color: Colors.black87,
-            decoration: TextDecoration.underline,
           ),
-        ));
-      }
-      
-      currentIndex = match.end;
-    }
-    
-    // Add remaining text after last file tag
-    if (currentIndex < originalText.length) {
-      final afterText = originalText.substring(currentIndex);
-      spans.add(TextSpan(
-        text: afterText,
-        style: const TextStyle(
-          fontSize: 16,
-          height: 1.5,
-          color: Colors.black87,
         ),
-      ));
+      );
     }
-    
+
     return spans;
   }
-  
+
   /// Open file attachment (placeholder for future implementation)
   void _openFile(BuildContext context, FileAttachment attachment) {
     // TODO: Implement file opening logic (preview dialog, download, etc.)

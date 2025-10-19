@@ -148,9 +148,9 @@ class ModelSelectorState extends State<ModelSelector> {
   String _getBedrockModelName(String modelId) {
     // Map of known Bedrock model IDs to friendly names
     const modelNames = {
-      'anthropic.claude-opus-4-1-20250805-v1:0': 'Claude Opus 4.1',
-      'anthropic.claude-sonnet-4-5-20250929-v1:0': 'Claude Sonnet 4.5',
-      'anthropic.claude-3-5-haiku-20241022-v1:0': 'Claude 3.5 Haiku',
+      'anthropic.claude-opus-4-20250514-v1:0': 'Claude Opus 4',
+      'global.anthropic.claude-sonnet-4-5-20250929-v1:0': 'Claude Sonnet 4.5',
+      'global.anthropic.claude-haiku-4-5-20251001-v1:0': 'Claude Haiku 4.5',
       'deepseek.r1-v1:0': 'DeepSeek-R1',
       'meta.llama3-3-70b-instruct-v1:0': 'Llama 3.3 70B Instruct',
       'openai.gpt-oss-120b-1:0': 'gpt-oss-120b',
@@ -456,4 +456,3 @@ class ModelSelectorState extends State<ModelSelector> {
     }
   }
 }
-

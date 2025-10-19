@@ -11,6 +11,7 @@ POST /messages/{chat_id}
 from typing import Optional, Iterator, Dict, Any, Tuple, Union, List
 import json
 import os
+import re
 import mimetypes
 import uuid
 import traceback
@@ -336,72 +337,84 @@ async def post_message(  # Changed to async
     db: Session = Depends(get_db),
 ):
     """Stream orchestrator events while ensuring persistence after completion."""
-    # Validate chat exists
-    chat = crud.get_chat(db, chat_id)
-    if not chat:
-        raise HTTPException(status_code=404, detail="Chat not found")
-    
-    # Validate feedback is provided when resuming interrupted workflow
-    if not message or message.strip() == "":
+    try:
+        # Validate chat exists
+        chat = crud.get_chat(db, chat_id)
+        if not chat:
+            raise HTTPException(status_code=404, detail="Chat not found")
+        
+        # Validate feedback is provided when resuming interrupted workflow
+        if not message or message.strip() == "":
+            raise HTTPException(
+                status_code=400, 
+                detail="Feedback is required to resume an interrupted workflow. Please provide your response."
+            )
+
+        # Handle file uploads (if any)
+        attachments, file_tags = await _upload_files(chat_id, files)  # Call _upload_files
+        # Combine message content with file tags for orchestrator processing
+        orchestrator_content = message
+        if file_tags:
+            orchestrator_content = f"{message}\n\n{file_tags}" if message.strip() else file_tags
+
+        # Create user message with attachments
+        print(f"[DB LOG] Creating user message with db session: {db}")
+        user_msg = crud.create_message(
+            db,
+            chat_id=chat_id,
+            role="user",
+            content=message,               # Clean content for user display
+            attachments=attachments,       # Metadata for frontend display
+            msg_type="question",
+        )
+        print(f"[DB LOG] Created user message with id: {user_msg.id}")
+        
+        # Create assistant message placeholder FIRST to get real ID
+        print(f"[DB LOG] Creating assistant message with db session: {db}")
+        assistant_msg = crud.create_message(
+            db,
+            chat_id=chat_id,
+            role="assistant",
+            content="",  # Empty for now, will be updated after streaming
+            msg_type="response",  # Default to response, will update if interrupted
+        )
+        print(f"[DB LOG] Created assistant message with id: {assistant_msg.id}")
+        
+        # Extract IDs before session closes (avoid DetachedInstanceError)
+        assistant_msg_id = assistant_msg.id
+        user_msg_id = user_msg.id
+        print(f"[DB LOG] Extracted IDs - user_msg_id: {user_msg_id}, assistant_msg_id: {assistant_msg_id}")
+        
+        # Fetch all messages BEFORE closing the db session
+        print(f"[DB LOG] About to call crud.get_messages with db session: {db}")
+        db_messages = crud.get_messages(db, chat_id)
+        print(f"[DB LOG] Successfully got {len(db_messages)} messages")
+        
+        # Close the database session NOW to free up connection pool
+        # The session will be reopened later only for final persistence
+        db.close()
+        print(f"[DB LOG] Closed db session to free connection pool")
+        
+        # Build thread-safe config (each request has isolated config)
+        config = {
+            "configurable": {
+                "thread_id": chat_id,              # Used by LangGraph for checkpointing
+                "message_id": assistant_msg_id,    # Used by executor for output folders
+            }
+        }
+    except Exception as e:
+        # Catch any errors during setup phase and return full traceback
+        error_trace = traceback.format_exc()
+        print(f"[ERROR] Exception in post_message setup: {error_trace}")
         raise HTTPException(
-            status_code=400, 
-            detail="Feedback is required to resume an interrupted workflow. Please provide your response."
+            status_code=500, 
+            detail=f"Error in post_message: {str(e)}\n\nTraceback:\n{error_trace}"
         )
 
-    # Handle file uploads (if any)
-    attachments, file_tags = await _upload_files(chat_id, files)  # Call _upload_files
-    # Combine message content with file tags for orchestrator processing
-    orchestrator_content = message
-    if file_tags:
-        orchestrator_content = f"{message}\n\n{file_tags}" if message.strip() else file_tags
-
-    # Create user message with attachments
-    print(f"[DB LOG] Creating user message with db session: {db}")
-    user_msg = crud.create_message(
-        db,
-        chat_id=chat_id,
-        role="user",
-        content=message,               # Clean content for user display
-        attachments=attachments,       # Metadata for frontend display
-        msg_type="question",
-    )
-    print(f"[DB LOG] Created user message with id: {user_msg.id}")
-    
-    # Create assistant message placeholder FIRST to get real ID
-    print(f"[DB LOG] Creating assistant message with db session: {db}")
-    assistant_msg = crud.create_message(
-        db,
-        chat_id=chat_id,
-        role="assistant",
-        content="",  # Empty for now, will be updated after streaming
-        msg_type="response",  # Default to response, will update if interrupted
-    )
-    print(f"[DB LOG] Created assistant message with id: {assistant_msg.id}")
-    
-    # Extract IDs before session closes (avoid DetachedInstanceError)
-    assistant_msg_id = assistant_msg.id
-    user_msg_id = user_msg.id
-    print(f"[DB LOG] Extracted IDs - user_msg_id: {user_msg_id}, assistant_msg_id: {assistant_msg_id}")
-    
-    # Fetch all messages BEFORE closing the db session
-    print(f"[DB LOG] About to call crud.get_messages with db session: {db}")
-    db_messages = crud.get_messages(db, chat_id)
-    print(f"[DB LOG] Successfully got {len(db_messages)} messages")
-    
-    # Close the database session NOW to free up connection pool
-    # The session will be reopened later only for final persistence
-    db.close()
-    print(f"[DB LOG] Closed db session to free connection pool")
-    
-    # Build thread-safe config (each request has isolated config)
-    config = {
-        "configurable": {
-            "thread_id": chat_id,              # Used by LangGraph for checkpointing
-            "message_id": assistant_msg_id,    # Used by executor for output folders
-        }
-    }
-
     def event_generator() -> Iterator[str]:
+        from datetime import datetime
+        from langchain_core.messages import AIMessageChunk
+        
         state_uid: Optional[str] = None
         accum_state: List[Dict[str, Any]] = []
         last_updated_node: Optional[str] = None  # "classify" | "precedent" | "route"
@@ -434,20 +447,105 @@ async def post_message(  # Changed to async
                     messages.append(AIMessage(content=m.content))
             orchestrator = req.app.state.orchestrator
             for raw in orchestrator_stream(orchestrator, messages, config, interrupted):
+                recv_time = datetime.now()
                 etype, payload = _normalize_event(raw)
+                print(f"⏱️ [EVENT RECEIVED] {recv_time.strftime('%H:%M:%S.%f')[:-3]} - Type: {etype}")
 
                 # Handle message chunks with smart filtering for user-facing content
                 if etype == "messages":
                     # Extract content from AIMessageChunk (payload is always a tuple)
+                    # print(f"🔧 [DEBUG] messages: {payload}")
                     chunk_obj = payload[0]  # AIMessageChunk
-                    chunk_content = chunk_obj.content or ""
-                    if chunk_content:
-                        chunk_accumulator += chunk_content
-                        
+                    metadata = payload[1] if len(payload) > 1 else {}
+                    
+                    # Check provider to determine processing strategy
+                    ls_provider = metadata.get('ls_provider', '')
+                    langgraph_node = metadata.get('langgraph_node', '')
+                    print(f"🔧 [FRONTEND DEBUG] ls_provider: {ls_provider}")
+                    print(f"🔧 [FRONTEND DEBUG] langgraph_node: {langgraph_node}")
+                    # Skip messages without ls_provider - they're duplicates from node returns
+                    if not ls_provider:
+                        print(f"🔧 [FRONTEND DEBUG] ⚠️ Skipping message without ls_provider (duplicate from node return)")
+                        continue
+                    
+                    # ===== NORMALIZE TO UNIVERSAL FORMAT (Ollama format) =====
+                    # Universal format: content = JSON string, additional_kwargs['reasoning_content'] = reasoning text
+                    normalized_content = ""
+                    normalized_reasoning = ""
+                    
+                    if ls_provider == 'ollama':
+                        # Ollama: already in universal format
+                        print(f"🔧 [FRONTEND DEBUG] Processing Ollama format")
+                        normalized_content = chunk_obj.content or ""
+                        normalized_reasoning = chunk_obj.additional_kwargs.get('reasoning_content', '')
+                    
+                    elif ls_provider == 'amazon_bedrock':
+                        # Bedrock: convert to universal format
+                        print(f"🔧 [FRONTEND DEBUG] Processing Bedrock format - converting to universal format")
+                        if isinstance(chunk_obj.content, list):
+                            # Extract reasoning from content list
+                            for item in chunk_obj.content:
+                                if isinstance(item, dict) and item.get('type') == 'reasoning_content':
+                                    reasoning_item = item.get('reasoning_content', {})
+                                    if isinstance(reasoning_item, dict):
+                                        normalized_reasoning = reasoning_item.get('text', '')
+                                    elif isinstance(reasoning_item, str):
+                                        normalized_reasoning = reasoning_item
+                                    break
+                            
+                            # Extract JSON text from content list
+                            for item in chunk_obj.content:
+                                if isinstance(item, dict) and item.get('type') == 'text':
+                                    json_text = item.get('text', '')
+                                    # Strip markdown code fences
+                                    json_text = re.sub(r'^```json\s*', '', json_text)
+                                    json_text = re.sub(r'\s*```$', '', json_text).strip()
+                                    normalized_content = json_text
+                                    break
+                        else:
+                            normalized_content = str(chunk_obj.content) if chunk_obj.content else ""
+                    
+                    else:
+                        # Unknown provider: treat as plain text
+                        normalized_content = str(chunk_obj.content) if chunk_obj.content else ""
+                    
+                    print(f"🔧 [FRONTEND DEBUG] normalized_content: {repr(normalized_content[:100])}")
+                    print(f"🔧 [FRONTEND DEBUG] normalized_reasoning: {repr(normalized_reasoning[:50]) if normalized_reasoning else 'None'}")
+                    
+                    # Skip if both are empty
+                    if not normalized_content and not normalized_reasoning:
+                        print(f"🔧 [FRONTEND DEBUG] ⚠️ Skipping - both content and reasoning are empty")
+                        continue
+                    
+                    # ===== YIELD REASONING FIRST (if present) =====
+                    if normalized_reasoning:
+                        print(f"🔧 [FRONTEND DEBUG] ✅ YIELDING reasoning to frontend")
+                        reasoning_chunk = AIMessageChunk(
+                            content='',
+                            additional_kwargs={'reasoning_content': normalized_reasoning},
+                            response_metadata=chunk_obj.response_metadata if hasattr(chunk_obj, 'response_metadata') else {},
+                            id=chunk_obj.id if hasattr(chunk_obj, 'id') else None
+                        )
+                        reasoning_payload = (reasoning_chunk, metadata)
+                        yield _ndjson(etype, reasoning_payload)
+                    
+                    # If there's no JSON content, we're done
+                    if not normalized_content:
+                        print(f"🔧 [FRONTEND DEBUG] No content to process, continuing to next message")
+                        continue
+                    
+                    # ===== PROCESS CONTENT (now in universal format) =====
+                    chunk_accumulator += normalized_content
+                    print(f"🔧 [FRONTEND DEBUG] chunk_accumulator: {repr(chunk_accumulator[:200])}")
+                    
+                    # Branch 1: Ollama - use streaming JSON logic
+                    if ls_provider == 'ollama':
+                        print(f"🔧 [FRONTEND DEBUG] Processing as Ollama (streaming)")
                         # Use helper function to determine if this chunk should be yielded
                         should_yield_chunk, streaming_state, quote_count, truncated_content = _should_yield_message_chunk(
-                            chunk_content, chunk_accumulator, streaming_state, quote_count
+                            normalized_content, chunk_accumulator, streaming_state, quote_count
                         )
+                        print(f"🔧 [FRONTEND DEBUG] should_yield_chunk: {should_yield_chunk}, streaming_state: {streaming_state}")
                         
                         # Try to parse for state persistence (regardless of yielding)
                         try:
@@ -456,31 +554,108 @@ async def post_message(  # Changed to async
                                 json_patch = _to_jsonable(parsed_json)
                                 if isinstance(json_patch, dict):
                                     accum_state.append(json_patch)
+                                print(f"🔧 [FRONTEND DEBUG] Successfully parsed JSON, resetting accumulator")
                                 chunk_accumulator = ""  # Reset after successful parse
                                 streaming_state = "NORMAL"  # Reset streaming state
                                 quote_count = 0
                         except (json.JSONDecodeError, ValueError):
                             # Not valid JSON yet, continue accumulating
+                            print(f"🔧 [FRONTEND DEBUG] Not valid JSON yet, continuing to accumulate")
                             pass
                         
                         # Only yield this message event if it contains user-facing content
                         if should_yield_chunk:
-                            if truncated_content is not None:
-                                # Modify payload directly with truncated content
-                                original_content = chunk_obj.content
-                                chunk_obj.content = truncated_content
-                                yield _ndjson(etype, payload)
-                                chunk_obj.content = original_content  # Restore original
-                            else:
-                                # Normal yielding
-                                yield _ndjson(etype, payload)
+                            print(f"🔧 [FRONTEND DEBUG] ✅ YIELDING to frontend! truncated: {truncated_content is not None}")
+                            content_to_yield = truncated_content if truncated_content is not None else normalized_content
+                            # Create a new chunk with content only (reasoning already sent)
+                            content_chunk = AIMessageChunk(
+                                content=content_to_yield,
+                                additional_kwargs={},
+                                response_metadata=chunk_obj.response_metadata if hasattr(chunk_obj, 'response_metadata') else {},
+                                id=chunk_obj.id if hasattr(chunk_obj, 'id') else None
+                            )
+                            content_payload = (content_chunk, metadata)
+                            print(f"🎯 [YIELD #1] Ollama streaming content: {content_to_yield[:50]}")
+                            yield _ndjson(etype, content_payload)
+                        else:
+                            print(f"🔧 [FRONTEND DEBUG] ❌ NOT yielding to frontend (filtered out)")
                     
-                        # Continue to next iteration to avoid yielding again below
-                        continue
+                    # Branch 2: Non-Ollama (Bedrock, etc.) - parse complete JSON
+                    else:
+                        print(f"🔧 [FRONTEND DEBUG] Processing as non-Ollama (complete JSON)")
+                        # Try to parse as complete JSON
+                        try:
+                            parsed_json_obj = json.loads(chunk_accumulator)
+                            if isinstance(parsed_json_obj, dict):
+                                print(f"🔧 [FRONTEND DEBUG] Successfully parsed complete JSON")
+                                
+                                # Extract user-facing content from complete JSON
+                                user_facing_content = None
+                                if "clarification_question" in parsed_json_obj:
+                                    user_facing_content = parsed_json_obj["clarification_question"]
+                                    print(f"🔧 [FRONTEND DEBUG] Found clarification_question")
+                                elif "response" in parsed_json_obj:
+                                    user_facing_content = parsed_json_obj["response"]
+                                    print(f"🔧 [FRONTEND DEBUG] Found response")
+                                
+                                if user_facing_content:
+                                    print(f"🔧 [FRONTEND DEBUG] ✅ Yielding user-facing content to frontend")
+                                    # Create a new chunk with only user-facing content (in universal format)
+                                    content_chunk = AIMessageChunk(
+                                        content=user_facing_content,
+                                        additional_kwargs={},
+                                        response_metadata=chunk_obj.response_metadata if hasattr(chunk_obj, 'response_metadata') else {},
+                                        id=chunk_obj.id if hasattr(chunk_obj, 'id') else None
+                                    )
+                                    content_payload = (content_chunk, metadata)
+                                    print(f"🎯 [YIELD #3] Non-Ollama JSON content: {user_facing_content[:50]}")
+                                    yield _ndjson(etype, content_payload)
+                                else:
+                                    # No user-facing content - don't yield anything
+                                    # (reasoning was already yielded earlier if present)
+                                    print(f"🔧 [FRONTEND DEBUG] No user-facing content, not yielding (reasoning already sent)")
+                                
+                                # Save for state persistence
+                                json_patch = _to_jsonable(parsed_json_obj)
+                                if isinstance(json_patch, dict):
+                                    accum_state.append(json_patch)
+                                
+                                # Reset accumulator
+                                chunk_accumulator = ""
+                                streaming_state = "NORMAL"
+                                quote_count = 0
+                        except (json.JSONDecodeError, ValueError):
+                            # Not valid JSON - check if it's plain text
+                            if not chunk_accumulator.strip().startswith('{'):
+                                print(f"🔧 [FRONTEND DEBUG] ✅ Plain text detected, yielding directly to frontend")
+                                # Plain text - yield directly (create new chunk in universal format)
+                                content_chunk = AIMessageChunk(
+                                    content=normalized_content,
+                                    additional_kwargs={},
+                                    response_metadata=chunk_obj.response_metadata if hasattr(chunk_obj, 'response_metadata') else {},
+                                    id=chunk_obj.id if hasattr(chunk_obj, 'id') else None
+                                )
+                                content_payload = (content_chunk, metadata)
+                                print(f"🎯 [YIELD #4] Non-Ollama plain text: {normalized_content[:50]}")
+                                yield _ndjson(etype, content_payload)
+                                chunk_accumulator = ""
+                                streaming_state = "NORMAL"
+                                quote_count = 0
+                            else:
+                                print(f"🔧 [FRONTEND DEBUG] Incomplete JSON, continuing to accumulate")
+                    
+                    # Continue to next iteration to avoid yielding again below
+                    continue
 
                 # Incremental state persistence for other event types
                 elif etype in ("updates", "state_update"):
                     patch: Dict[str, Any] = payload if isinstance(payload, dict) else {"data": payload}
+                    
+                    # ✨ CRITICAL DEBUG: Log what nodes are in this update event
+                    if isinstance(patch, dict):
+                        node_keys = list(patch.keys())
+                        print(f"⏱️ [UPDATES EVENT] Received at {recv_time.strftime('%H:%M:%S.%f')[:-3]} with {len(node_keys)} node(s): {node_keys}")
+                    
                     # Store raw patch (with Interrupt objects intact) for proper extraction later
                     if isinstance(patch, dict):
                         accum_state.append(patch)
@@ -538,6 +713,11 @@ async def post_message(  # Changed to async
 
                 # Forward all other events to frontend (custom, error, etc.)
                 # Note: "messages" events are handled above with filtering
+                yield_time = datetime.now()
+                yield_delay = (yield_time - recv_time).total_seconds() * 1000  # in ms
+                print(f"🎯 [YIELD #5] Event type: {etype} at {yield_time.strftime('%H:%M:%S.%f')[:-3]} (delay: {yield_delay:.1f}ms)")
+                if etype in ("updates", "state_update") and isinstance(payload, dict):
+                    print(f"🎯 [YIELD #5] UPDATES event yielding nodes: {list(payload.keys())}")
                 yield _ndjson(etype, payload)
 
             merged_state = {}
@@ -653,6 +833,7 @@ async def post_message(  # Changed to async
                 print(f"[DB LOG] Closed final_db session")
 
             # Emit a final persisted notification so the client has IDs
+            print(f"🎯 [YIELD #6] Persisted event")
             yield json.dumps({
                 "type": "persisted",
                 "data": {
@@ -664,7 +845,9 @@ async def post_message(  # Changed to async
             }, ensure_ascii=False) + "\n"
 
         except Exception as e:
+            error_trace = traceback.format_exc()
             print(f"[DB LOG] Exception in generator: {type(e).__name__}: {str(e)}")
+            print(f"[DB LOG] Full traceback:\n{error_trace}")
             # Make sure to close final_db if it was created
             try:
                 if 'final_db' in locals():
@@ -672,7 +855,10 @@ async def post_message(  # Changed to async
                     print(f"[DB LOG] Closed final_db session after exception")
             except:
                 pass
-            yield _ndjson("error", {"message": f"{type(e).__name__}: {str(e)}"})
+            yield _ndjson("error", {
+                "message": f"{type(e).__name__}: {str(e)}",
+                "traceback": error_trace
+            })
 
     print(f"[DB LOG] About to return StreamingResponse (original db session already closed)")
     return StreamingResponse(event_generator(), media_type="application/x-ndjson")

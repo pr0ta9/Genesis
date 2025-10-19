@@ -17,9 +17,10 @@ services:
     restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres -d gen"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
+      interval: 5s
+      timeout: 5s
+      retries: 6
+      start_period: 10s
 
   # Weaviate service (REQUIRED for vector search and precedent storage)
   weaviate:
@@ -51,10 +52,10 @@ services:
     restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:8080/v1/.well-known/ready || exit 1"]
-      interval: 10s
+      interval: 5s
       timeout: 5s
-      retries: 5
-      start_period: 30s
+      retries: 6
+      start_period: 15s
 
   backend:
     build:
@@ -67,7 +68,7 @@ services:
       - GENESIS_KEEP_WORKSPACE=1
       - GENESIS_PROJECT_ROOT=/app
       - DATABASE_URL=postgresql+psycopg://postgres:postgres@postgres:5432/gen
-      - CORS_ORIGINS=["http://localhost:3000","http://frontend:3000"]
+      - CORS_ORIGINS=["*"]
       - ALLOWED_FILE_ROOTS=/app/.staging_uploads:/tmp
       # Ollama configuration (using host system Ollama)
       - OLLAMA_BASE_URL=http://host.docker.internal:11434
@@ -96,9 +97,10 @@ services:
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
     deploy:
       resources:
         reservations:
@@ -106,22 +108,6 @@ services:
             - driver: nvidia
               count: 1
               capabilities: [gpu]
-
-  frontend:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile
-    container_name: genesis-frontend
-    ports:
-      - "3000:3000"
-    environment:
-      - NEXT_PUBLIC_API_BASE=http://localhost:8000
-    depends_on:
-      - backend
-      - weaviate
-    networks:
-      - genesis-network
-    restart: unless-stopped
 
   # Optional: CLI service for running Genesis CLI commands
   cli:

@@ -25,7 +25,7 @@ system_prompt: |
   
   ## CRITICAL: File Reference System
   
-  **IMPORTANT**: Files are managed through a reference system. You will work with simple filenames, not paths.
+  **IMPORTANT**: Files are managed through a reference system. You will work with simple filenames, not paths. You will not have the ability to access the files, it is expected behavior.
   
   ### How File References Work:
   1. **Available Files**: You'll receive a list of available file references (e.g., ["photo.jpg", "document.pdf", "photo_v2.jpg"])
@@ -217,10 +217,3 @@ system_prompt: |
   4. **ASK for clarification** if the user's file request doesn't match available_files
   5. **USE exact reference names** including version suffixes (e.g., "photo_v2.jpg" not "photo.jpg" if user wants v2)
 
-metadata:
-  temperature: 0.8
-  max_tokens: -1
-  model_params:
-    top_p: 0.9
-invoke_kwargs:
-  reasoning: true

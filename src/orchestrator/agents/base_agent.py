@@ -34,13 +34,21 @@ class BaseAgent(ABC, Generic[ResponseType]):
             prompt_path: Path to the YAML prompt configuration file
         """
         # For now, keep support for unstructured models, but consider removing this
-        model_name = getattr(llm, "model", "")
-        self._use_structured_output = not (isinstance(model_name, str) and "gpt-oss" in model_name)
-
+        model_provider = getattr(llm, "_provider_type", "")
+        model_name = getattr(llm, "_model_name", "")
+        print(f"🔧 [DEBUG] model_provider: {model_provider}")
+        print(f"🔧 [DEBUG] model_name: {model_name}")
+        # Line 41 in base_agent.py - replace with:
+        self._use_structured_output = not (
+            model_provider == "bedrock" or 
+            (isinstance(model_name, str) and "gpt-oss" in model_name)
+        )
+        print(f"🔧 [DEBUG] self._use_structured_output: {self._use_structured_output}")
         # Preserve original model for raw invocations (reasoning capture)
         self.base_llm = llm
         if self._use_structured_output:
             self.llm = llm.with_structured_output(response_schema)
+            # self.llm = llm.with_structured_output(response_schema, method="json_mode")
         else:
             self.llm = llm
 
@@ -163,9 +171,9 @@ class BaseAgent(ABC, Generic[ResponseType]):
         metadata = self.prompt_config.get("metadata", {})
         
         # Check if LLM is Ollama (which uses 'options' parameter)
-        model_name = getattr(self.base_llm, "model", "")
         is_ollama = "ollama" in str(type(self.base_llm).__name__).lower()
         
+        # Only use invoke_kwargs for Ollama; other providers use bare invocation
         if is_ollama:
             # Ollama wraps parameters in 'options'
             invoke_options = {
@@ -173,15 +181,12 @@ class BaseAgent(ABC, Generic[ResponseType]):
                 "max_tokens": metadata.get("max_tokens", 500),
             }
             base_invoke_params = {"options": invoke_options}
+            # Enable reasoning if configured in metadata
+            invoke_kwargs = self.prompt_config.get("invoke_kwargs", {})
         else:
-            # Other providers (Bedrock, OpenAI, etc.) use direct parameters
-            base_invoke_params = {
-                "temperature": metadata.get("temperature", 0.1),
-                "max_tokens": metadata.get("max_tokens", 500),
-            }
-        
-        # Enable reasoning if configured in metadata
-        invoke_kwargs = self.prompt_config.get("invoke_kwargs", {})
+            # Other providers (Bedrock, etc.) use bare invocation with no extra params
+            base_invoke_params = {}
+            invoke_kwargs = {}
 
         # Invoke LLM
         self.logger.info("Starting invoke for: %s", node)
@@ -241,6 +246,9 @@ class BaseAgent(ABC, Generic[ResponseType]):
                     **invoke_kwargs,
                 )
                 print(f"🔧 [DEBUG] Unstructured LLM call successful")
+                # Normalize provider-specific response formats (Bedrock -> Ollama)
+                result = self._normalize_provider_response(result)
+                print(f"🔧 [DEBUG] Response normalized")
                 writer({"node": node, "content": result.additional_kwargs.get("reasoning_content"), "timestamp": result.response_metadata.get("created_at"), "think_duration": result.response_metadata.get("eval_duration")})
             except Exception as e:
                 print(f"❌ [DEBUG] FATAL ERROR in llm.invoke(): {type(e).__name__}: {e}")
@@ -447,6 +455,49 @@ class BaseAgent(ABC, Generic[ResponseType]):
             return '"' + fixed + '"'
 
         return string_pattern.sub(fix_string, text)
+    
+    def _normalize_provider_response(self, result: Any) -> Any:
+        """
+        Normalize Bedrock response format to match Ollama format.
+        
+        Bedrock: content = [{'type': 'reasoning_content', ...}, {'type': 'text', ...}]
+        Ollama: content = "json string", additional_kwargs['reasoning_content'] = "reasoning text"
+        """
+        # Check if this is Bedrock format (content is a list)
+        if isinstance(getattr(result, 'content', None), list):
+            reasoning_text = None
+            json_text = None
+            
+            # Extract reasoning and JSON from list
+            for item in result.content:
+                if isinstance(item, dict):
+                    if item.get('type') == 'reasoning_content':
+                        reasoning_content = item.get('reasoning_content', {})
+                        if isinstance(reasoning_content, dict):
+                            reasoning_text = reasoning_content.get('text', '')
+                    elif item.get('type') == 'text':
+                        json_text = item.get('text', '')
+            
+            # Strip markdown code fences from JSON
+            if json_text:
+                json_text = re.sub(r'^```json\s*', '', json_text)
+                json_text = re.sub(r'\s*```$', '', json_text).strip()
+            
+            # Create new AIMessage with normalized format
+            normalized_additional_kwargs = dict(result.additional_kwargs) if hasattr(result, 'additional_kwargs') else {}
+            if reasoning_text:
+                normalized_additional_kwargs['reasoning_content'] = reasoning_text
+            
+            return AIMessage(
+                content=json_text or "",
+                additional_kwargs=normalized_additional_kwargs,
+                response_metadata=result.response_metadata if hasattr(result, 'response_metadata') else {},
+                id=result.id if hasattr(result, 'id') else None,
+                usage_metadata=getattr(result, 'usage_metadata', None)
+            )
+        
+        # Already in correct format (Ollama)
+        return result
     
     @abstractmethod
     def _get_next_step(self, result: ResponseType) -> str:

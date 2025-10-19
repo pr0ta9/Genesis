@@ -65,12 +65,18 @@ class PathExecutor:
             
             try:
                 # Resolve input/output file paths
-                self._resolve_file_paths(tool_spec, chat_id, message_id)
+                self._resolve_file_paths(tool_spec, chat_id, message_id, step_index)
                 
                 # Create workspace for this tool
                 tmp_root = Path(os.environ.get("GENESIS_PROJECT_ROOT", os.getcwd())) / "tmp"
                 tmp_root.mkdir(parents=True, exist_ok=True)
                 workspace_dir = Path(tempfile.mkdtemp(prefix=f"genesis_{tool_name}_", dir=str(tmp_root)))
+                
+                # Initialize workspace with accumulated state from previous tools
+                from .process_isolation import StateStore
+                workspace_state = StateStore(workspace_dir)
+                for state_key, state_value in exec_state.items():
+                    workspace_state.set(state_key, state_value)
                 
                 # Emit start event
                 if writer:
@@ -91,10 +97,11 @@ class PathExecutor:
                     step_index=step_index,
                 )
                 
-                # Store result for potential chaining
+                # Store result for potential chaining with full tool-qualified key
                 if tool_spec.output_params and len(tool_spec.output_params) > 0:
                     output_key = tool_spec.output_params[0]
-                    exec_state[output_key] = result
+                    # Store with full key so next tools can reference it via ${tool_name.output_key}
+                    exec_state[f"{tool_name}.{output_key}"] = result
                     final_output = result
                 
                 # Emit end event
@@ -134,7 +141,8 @@ class PathExecutor:
         self,
         tool_spec: PathItem,
         chat_id: str,
-        message_id: str
+        message_id: str,
+        step_index: int = 1
     ) -> None:
         """
         Resolve simple filenames to absolute paths.
@@ -146,9 +154,12 @@ class PathExecutor:
             tool_spec: PathItem with param_values to resolve
             chat_id: Chat identifier
             message_id: Message identifier
+            step_index: Current step number (1-based) for auto-numbering outputs
         """
         if not tool_spec.param_values:
             return
+        
+        import re
         
         for param_name, param_value in tool_spec.param_values.items():
             # Only process simple filenames (no path separators)
@@ -164,11 +175,15 @@ class PathExecutor:
             )
             
             if is_output:
+                # Auto-adjust step numbering if filename follows pattern: \d+_toolname.ext
+                # Replace incorrect step number with actual step_index
+                adjusted_value = re.sub(r'^\d+_', f'{step_index:02d}_', param_value)
+                
                 # Output file - resolve to outputs/{chat_id}/{message_id}/{filename}
                 outputs_root = os.environ.get("GENESIS_OUTPUTS_ROOT") or str(
                     Path(os.environ.get("GENESIS_PROJECT_ROOT", os.getcwd())) / "outputs"
                 )
-                output_path = Path(outputs_root) / chat_id / str(message_id) / param_value
+                output_path = Path(outputs_root) / chat_id / str(message_id) / adjusted_value
                 output_path.parent.mkdir(parents=True, exist_ok=True)
                 tool_spec.param_values[param_name] = str(output_path)
             else:
