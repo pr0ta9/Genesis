@@ -98,7 +98,7 @@ You have two ways to start Genesis:
 
 #### **Option A: Quick Start (Recommended for Users)** 🚀
 
-Simply double-click one of the launcher scripts:
+Make sure your docker is opened and simply double-click one of the launcher scripts:
 
 - **`run_cpu.bat`** - CPU mode (works on any PC)
 - **`run_gpu.bat`** - GPU mode (NVIDIA GPU required, see warning below)
