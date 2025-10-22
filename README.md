@@ -34,9 +34,11 @@ A sophisticated multimodal AI assistant with LangGraph orchestration, Weaviate v
 ### Step 2: Clone and Setup Project
 
 ```bash
-# Clone the repository
-git clone <your-repository-url>
-cd Genesis
+# Clone the repository and switch to aws hackathon
+git clone https://github.com/pr0ta9/Genesis.git
+git switch aws-hackathon
+# make sure you are inside the repository
+cd path/to/Genesis
 
 # Make sure Docker is running
 docker --version
@@ -98,7 +100,7 @@ You have two ways to start Genesis:
 
 #### **Option A: Quick Start (Recommended for Users)** 🚀
 
-Make sure your docker is opened and simply double-click one of the launcher scripts:
+***Make sure your docker is opened*** and simply double-click one of the launcher scripts:
 
 - **`run_cpu.bat`** - CPU mode (works on any PC)
 - **`run_gpu.bat`** - GPU mode (NVIDIA GPU required, see warning below)
