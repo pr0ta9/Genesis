@@ -17,7 +17,7 @@ A sophisticated multimodal AI assistant with LangGraph orchestration, Weaviate v
 
 ## Quick Start Guide
 
-[**🎬 Watch the Genesis Demo →**](https://youtu.be/3ptw_qFj6xo)
+[**🎬 Watch the Genesis Demo →**](https://youtu.be/32crjY-VhK8)
 
 ### Step 1: Install Prerequisites
 
@@ -153,15 +153,9 @@ flutter pub get
 
 # Run the app
 flutter run -d windows    # For Windows
-flutter run -d macos      # For macOS
-flutter run -d linux      # For Linux
-flutter run -d chrome     # For Web browser
 
 # Or build release version
 flutter build windows
-flutter build macos
-flutter build linux
-flutter build web
 ```
 
 **3. Stop Services:**
