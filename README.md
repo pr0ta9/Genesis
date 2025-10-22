@@ -355,7 +355,7 @@ Genesis supports multiple AI providers. Configure via the **Settings page in the
 #### Local Models (Recommended)
 - **Ollama** (Default): Free, runs locally, privacy-focused
   - ✅ **Fully tested** with `gpt-oss:20b`
-  - ⚠️ **Must be running**: Start `ollama serve` and open docker before launching Genesis
+  - ⚠️ **Must be running**: Start ollama and open docker before launching Genesis
   - Auto-detected at `http://localhost:11434`
 
 #### Cloud AI Providers (Optional)
