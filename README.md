@@ -355,7 +355,7 @@ Genesis supports multiple AI providers. Configure via the **Settings page in the
 #### Local Models (Recommended)
 - **Ollama** (Default): Free, runs locally, privacy-focused
   - ✅ **Fully tested** with `gpt-oss:20b`
-  - ⚠️ **Must be running**: Start with `ollama serve` before launching Genesis
+  - ⚠️ **Must be running**: Start `ollama serve` and open docker before launching Genesis
   - Auto-detected at `http://localhost:11434`
 
 #### Cloud AI Providers (Optional)
@@ -363,15 +363,6 @@ Configure these through **GUI Settings → Provider Settings**:
 
 - **AWS Bedrock**: Access to Claude, Llama, and other models
   - Add your AWS access key, secret key, and region in GUI settings
-  - ⚠️ Untested - may have compatibility issues
-
-- **Google Gemini**: Access to Gemini models  
-  - Add your Google API key in GUI settings
-  - ⚠️ Untested - may have compatibility issues
-
-- **OpenAI**: Access to GPT-4, GPT-3.5 models
-  - Add your OpenAI API key in GUI settings
-  - ⚠️ Untested - may have compatibility issues
 
 - **Other Providers**: Additional providers can be configured in GUI settings
 
