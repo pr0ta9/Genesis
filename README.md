@@ -47,9 +47,9 @@ docker-compose --version
 
 ### Step 3: Download AI Models
 
-Genesis requires OpenAI's gpt-oss models running through Ollama.
-
-> ✅ **Fully Tested Model**: Genesis has been fully tested and verified with `gpt-oss:20b`. Other models may work but could contain errors or unexpected behavior.
+> ✅ **Fully Tested Model**: Genesis has been fully tested and verified with `claude:haiku-4.5`. Other models may work but could contain errors or unexpected behavior.
+> 
+> ⚠️ **Known Issue**: `gpt-oss:120b` does NOT work with Genesis. Please use `claude:haiku-4.5` instead.
 
 **Install and configure Ollama:**
 
@@ -58,10 +58,13 @@ Genesis requires OpenAI's gpt-oss models running through Ollama.
 ollama serve
 
 # In a new terminal, download the AI model
-# Option A: gpt-oss:20b (14GB, requires 16GB+ RAM) - RECOMMENDED & FULLY TESTED
-ollama pull gpt-oss:20b
+# Recommended: Claude Haiku 4.5 - RECOMMENDED & FULLY TESTED
+ollama pull claude:haiku-4.5
 
-# Option B: Larger model (65GB, requires 80GB+ memory) - UNTESTED, may have issues
+# Alternative: gpt-oss:20b (14GB, requires 16GB+ RAM) - May work but not fully tested
+# ollama pull gpt-oss:20b
+
+# DO NOT USE: Larger model (65GB, requires 80GB+ memory) - DOES NOT WORK
 # ollama pull gpt-oss:120b
 
 # Verify the model downloaded successfully
@@ -71,7 +74,7 @@ ollama list
 **Important Notes:**
 - ⏱️ Model download may take 10-30 minutes depending on your internet speed
 - 🔄 **Ollama must be running in the background** whenever you use Genesis
-- ✅ Use `gpt-oss:20b` for best compatibility (fully tested)
+- ✅ Use `claude:haiku-4.5` for best compatibility (fully tested)
 - ⚠️ Other models are untested and may produce errors
 
 ### Step 4: Configure Environment
