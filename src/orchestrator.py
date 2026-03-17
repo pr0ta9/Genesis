@@ -1,4 +1,5 @@
 import logging
+import os
 from typing import Any, Dict, List, Optional, Generator
 from pathlib import Path
 
@@ -22,7 +23,7 @@ class Orchestrator:
     def __init__(self):
         load_dotenv(override=True)
         # Initialize LLM for agents (simple default; can be customized externally)
-        self.llm = setup_llm("ollama", "gpt-oss:20b")
+        self.llm = setup_llm("ollama", os.environ.get("GENESIS_MODEL", "nemotron-3-super:120b"))
         self.llm.bind_tools([search])
         # Initialize agents
         self.classifier = Classifier(self.llm)

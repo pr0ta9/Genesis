@@ -11,7 +11,8 @@ def translate(text_data: StructuredData, model: BaseChatModel, target_language: 
     if model is None:
         try:
             from src.agents.llm import setup_llm
-            model = setup_llm("ollama", "gpt-oss:20b")
+            import os
+            model = setup_llm("ollama", os.environ.get("GENESIS_MODEL", "nemotron-3-super:120b"))
         except Exception as e:
             raise RuntimeError(f"Translation model is required but could not be initialized: {e}")
     

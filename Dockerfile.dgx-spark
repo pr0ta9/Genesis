@@ -1,0 +1,49 @@
+# Dockerfile for NVIDIA DGX Spark (GB10) - ARM64 / Blackwell sm_121 / CUDA 13.0
+# Uses PyTorch with CUDA 13.0 (required for GB10's Blackwell GPU)
+FROM ubuntu:24.04
+
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    DEBIAN_FRONTEND=noninteractive
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    python3 python3-pip python3-venv \
+    build-essential cmake pkg-config \
+    libopencv-dev libglib2.0-0 libsm6 libxext6 libxrender-dev \
+    libgomp1 libglib2.0-dev \
+    libavcodec-dev libavformat-dev libswscale-dev \
+    libjpeg-dev libpng-dev libtiff-dev \
+    libopenblas-dev gfortran \
+    wget git curl libmagic1 \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Install PyTorch with CUDA 13.0 (required for sm_121 / Blackwell on DGX Spark)
+RUN pip3 install torch torchvision torchaudio \
+    --index-url https://download.pytorch.org/whl/cu130 --break-system-packages
+
+# Copy and install Python dependencies
+COPY requirements-docker-gpu.txt ./requirements.txt
+COPY backend/requirements-docker.txt ./backend_requirements.txt
+
+RUN pip3 install ollama --break-system-packages
+RUN pip3 install --no-cache-dir -r requirements.txt --break-system-packages || true
+RUN pip3 install --no-cache-dir -r backend_requirements.txt --break-system-packages || true
+
+# Copy project source code
+COPY . .
+
+ENV PYTHONPATH="/app:/app/src:/app/backend"
+
+RUN mkdir -p /app/data /app/tmp /app/inputs /app/outputs
+
+EXPOSE 8000
+
+HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
+    CMD curl -f http://localhost:8000/health || exit 1
+
+CMD ["python3", "-m", "uvicorn", "backend.app.main:app", "--host", "0.0.0.0", "--port", "8000"]

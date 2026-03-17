@@ -1,15 +1,26 @@
 # Genesis AI Assistant
 
-A sophisticated multimodal AI assistant with LangGraph orchestration, supporting images, audio, documents, and video processing using OpenAI's gpt-oss models.
+A sophisticated multimodal AI assistant with LangGraph orchestration, supporting images, audio, documents, and video processing — powered by **NVIDIA Nemotron 3 Super 120B** running locally on **DGX Spark (GB10)**.
+
+Built for [Hack for Impact @ GTC 2026](https://luma.com/gtc-hack-for-impact) | Environmental Impact Track
+
+## Environmental Impact
+
+Genesis enables environmental analysis through its multimodal AI pipeline:
+- **Image Analysis** — Process environmental photos: landscape documentation, pollution monitoring, species identification from field images, trail sign OCR
+- **Document Processing** — Extract data from environmental reports, research papers, and field notes via OCR and translation
+- **Audio Processing** — Denoise field recordings for wildlife monitoring and acoustic ecology research
+- **Web Research** — Pull real-time environmental data, air quality reports, and conservation news
+- All AI inference runs **100% locally** on DGX Spark — zero cloud compute, minimal carbon footprint
 
 ## Features
 
-- **AI-Powered Image Processing**: Genesis leverages advanced AI models for intelligent image manipulation
+- **AI-Powered Multimodal Processing**: Images, audio, documents, and video through intelligent tool chaining
 - **Full-Stack Architecture**: Python backend with FastAPI, Next.js frontend with React and TypeScript
-- **Docker Support**: Containerized deployment for easy setup and scalability (CPU/GPU modes)
+- **Docker Support**: Containerized deployment for easy setup and scalability (CPU/GPU/DGX Spark modes)
 - **Real-time Processing**: WebSocket support for live updates and streaming
-- **Local AI Models**: Integration with OpenAI's gpt-oss models via Ollama for powerful reasoning and agentic tasks
-- **Multiple Deployment Options**: Host Ollama (recommended) or containerized Ollama
+- **Local AI Models**: Nemotron 3 Super 120B via Ollama on NVIDIA DGX Spark for powerful reasoning and agentic tasks
+- **Multiple Deployment Options**: Host Ollama (recommended), containerized Ollama, or DGX Spark native
 
 ## Prerequisites
 
@@ -24,26 +35,23 @@ A sophisticated multimodal AI assistant with LangGraph orchestration, supporting
 
 ## AI Model Setup (Required)
 
-Genesis requires OpenAI's gpt-oss models to function. After installing Ollama, download the required AI model:
+Genesis uses **NVIDIA Nemotron 3 Super 120B** for optimal performance on DGX Spark, or OpenAI's gpt-oss models as alternatives.
 
 ```bash
-# Download OpenAI's gpt-oss 20B model (14GB, requires 16GB+ RAM)
-ollama pull gpt-oss:20b
+# Recommended: Nemotron 3 Super 120B on DGX Spark (86GB, requires 128GB unified memory)
+ollama pull nemotron-3-super:120b
 
-# OR download the larger 120B model (65GB, requires 80GB+ memory)  
-ollama pull gpt-oss:120b
+# Alternative: gpt-oss 20B for smaller systems (14GB, requires 16GB+ RAM)
+ollama pull gpt-oss:20b
 
 # Verify the model is available
 ollama list
 ```
 
-**Model Information**: [OpenAI's gpt-oss models](https://ollama.com/library/gpt-oss) are designed for powerful reasoning, agentic tasks, and versatile developer use cases. The 20B model (14GB) is optimized for lower latency and can run on systems with as little as 16GB memory.
-
-### Model Features
-- **Agentic capabilities**: Function calling, web browsing, Python tool calls, and structured outputs
-- **Full chain-of-thought**: Complete access to the model's reasoning process
-- **Configurable reasoning effort**: Adjust reasoning effort (low, medium, high) based on your use case
-- **Apache 2.0 license**: Build freely without copyleft restrictions
+Set the model via environment variable:
+```bash
+export GENESIS_MODEL=nemotron-3-super:120b  # or gpt-oss:20b
+```
 
 ## Environment Configuration
 
@@ -108,6 +116,26 @@ docker-compose -f docker-compose.yml -f docker-compose.gpu.yml down
 - NVIDIA GPU with CUDA 12.8+ support
 - NVIDIA Docker runtime installed
 - 12GB+ GPU memory recommended
+
+#### DGX Spark Mode (NVIDIA GB10 — Recommended for Hack for Impact)
+For NVIDIA DGX Spark with Nemotron 3 Super 120B:
+
+```bash
+# Ensure Ollama is running with Nemotron 3 Super
+ollama pull nemotron-3-super:120b
+
+# Start with DGX Spark support (uses host Ollama)
+docker-compose -f docker-compose.dgx-spark.yml up -d
+
+# View logs
+docker-compose -f docker-compose.dgx-spark.yml logs -f
+```
+
+**DGX Spark Requirements:**
+- NVIDIA DGX Spark (GB10) with 128GB unified memory
+- DGX OS (Ubuntu 24.04)
+- Ollama with Nemotron 3 Super 120B loaded
+- Docker with NVIDIA Container Toolkit
 
 #### Development Mode
 For development with hot reload:
@@ -300,6 +328,14 @@ docker-compose up -d
 docker compose down
 ```
 
+## NVIDIA Ecosystem Usage
+
+- **Nemotron 3 Super 120B** — Main agent brain for multimodal task orchestration, reasoning, and environmental analysis
+- **NVIDIA DGX Spark (GB10)** — 128GB unified memory enables running 120B parameter model locally
+- **Ollama on DGX Spark** — Local model serving with GPU acceleration
+- **CUDA 13.0 / sm_121** — Native Blackwell GPU support via custom Dockerfile
+- **NVIDIA Container Toolkit** — GPU-accelerated Docker containers
+
 ## Contributing
 
 1. Fork the repository
@@ -316,7 +352,7 @@ The OpenAI gpt-oss models are licensed under the Apache 2.0 license.
 
 ## Acknowledgments
 
-- [OpenAI](https://openai.com) for the gpt-oss models
+- [NVIDIA](https://nvidia.com) for Nemotron 3 Super, DGX Spark, and OpenShell
 - [Ollama](https://ollama.com) for local AI model runtime
 - [LangChain](https://langchain.com) for AI orchestration framework
 - [FastAPI](https://fastapi.tiangolo.com) for the backend framework
